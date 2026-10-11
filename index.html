@@ -168,6 +168,7 @@ pre.wo{margin:8px 0 0;padding:10px;border-radius:8px;background:var(--bg);border
   <button class="nav" data-view="hoy"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Hoy</button>
   <button class="nav" data-view="actividades"><svg viewBox="0 0 24 24"><circle cx="6" cy="16" r="4"/><circle cx="18" cy="16" r="4"/><path d="M6 16l4-8h5l3 8M10 8l2 8h-6"/></svg>Actividades</button>
   <button class="nav" data-view="coach"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>Coach</button>
+  <button class="nav" data-view="modelo"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M4 16c3-9 6-9 8-4s5 5 8-6"/><circle cx="12" cy="12" r="1.2"/><circle cx="7" cy="9.5" r="1.2"/><circle cx="17" cy="9" r="1.2"/></svg>Modelo</button>
   <button class="nav" data-view="plan"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Plan</button>
   <button class="nav" data-view="bienestar"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></svg>Bienestar</button>
   <button class="nav" data-view="ajustes"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Ajustes</button>
@@ -251,6 +252,7 @@ function normalize(profile, wellness, activities, events){
   })).filter(x => x.date).sort((a,b) => a.date.localeCompare(b.date));
   const a = (activities||[]).map(x => ({
     id: x.id, rpe: x.icu_rpe, feel: x.feel, decoupling: x.decoupling,
+    ef: x.icu_efficiency_factor ?? (x.icu_weighted_avg_watts && x.average_heartrate ? x.icu_weighted_avg_watts / x.average_heartrate : null),
     date: (x.start_date_local||"").slice(0,10), name: x.name || x.type, type: x.type,
     time: x.moving_time, dist: x.distance, load: x.icu_training_load,
     np: x.icu_weighted_avg_watts, hr: x.average_heartrate, ifac: x.icu_intensity, elev: x.total_elevation_gain
@@ -280,10 +282,11 @@ function demoData(){
     load *= block;
     ctl += (load-ctl)/42; atl += (load-atl)/7;
     w.push({date:iso(d), ctl:+ctl.toFixed(1), atl:+atl.toFixed(1), hrv: Math.round(62+rnd()*14-(atl-ctl)*.15), rhr: Math.round(48+rnd()*4+(atl-ctl)*.05), weight: 71.5+rnd()*.8, sleep: 6.4*3600+rnd()*7200});
-    if(load>0 && i<56){
+    if(load>0){
       const t = load/ (dow===6?62:dow===2||dow===0?78:50) * 3600;
       a.push({id:"demo-"+i, rpe: i<4 ? undefined : dow===2?8:dow===6?6:4, date:iso(d), name:names[dow===3?1:dow]||"Rodaje", type:"Ride", time:t, dist:t*(dow===4?7.5:8.6), load:Math.round(load),
-        np: Math.round(dow===2?262:dow===0?248:dow===6?214:180), hr: Math.round(dow===2?156:dow===6?142:128), ifac: dow===2?88:dow===0?84:dow===6?74:62, elev: Math.round(200+rnd()*900)});
+        np: Math.round(dow===2?262:dow===0?248:dow===6?214:180), hr: Math.round(dow===2?156:dow===6?142:128),
+        ef: +(1.25 + 0.006*ctl - 0.005*atl + (rnd()-.5)*0.05).toFixed(3), ifac: dow===2?88:dow===0?84:dow===6?74:62, elev: Math.round(200+rnd()*900)});
     }
   }
   const e=[]; for(let i=1;i<=14;i++){ const d=addDays(today,i), dow=d.getDay();
@@ -293,7 +296,98 @@ function demoData(){
     else if(dow===6) e.push({date:iso(d),name:"Salida larga 3h30",cat:"WORKOUT",type:"Ride",time:12600,load:170});
   }
   a.reverse();
-  return { name:"Atleta de ejemplo", ftp:275, wellness:w, allActivities:a, activities:a, events:e };
+  const s56 = iso(addDays(today,-56));
+  return { name:"Atleta de ejemplo", ftp:275, wellness:w, allActivities:a, activities:a.filter(x => x.date >= s56), events:e };
+}
+
+/* ---------- Modelo de rendimiento personal: impulso-respuesta de Banister ajustado a sus datos ----------
+   rendimiento(t) = p0 + k1·Σ carga(s)·e^(−(t−s)/τ1) − k2·Σ carga(s)·e^(−(t−s)/τ2)
+   Rendimiento medido = eficiencia aeróbica (potencia normalizada ÷ FC) en salidas de bici de ≥40 min con IF 55–85 %.
+   Para cada par (τ1, τ2) de una grilla, p0, k1 y k2 salen por mínimos cuadrados; se valida con el 20 % más reciente. */
+const STD = { t1:42, t2:7 }, MIN_OBS = 20;
+function plannedLoads(D){
+  const today = iso(new Date()), map = {};
+  D.events.forEach(e => { if(e.date > today && e.load) map[e.date] = (map[e.date]||0) + e.load });
+  const wk = cacheGet("coach.week");
+  if(wk) wk.r.dias.forEach(d => { if(d.fecha > today) map[d.fecha] = d.load || 0 });
+  return map;
+}
+function dailyLoads(D, extra){
+  const acts = D.allActivities || D.activities, first = acts.map(a => a.date).sort()[0] || iso(new Date());
+  const days = [], idx = {}, end = addDays(new Date(), extra); end.setHours(12,0,0,0);
+  for(let d = new Date(first+"T12:00:00"); d <= end; d = addDays(d,1)){ idx[iso(d)] = days.length; days.push({ date: iso(d), load: 0 }) }
+  acts.forEach(a => { const i = idx[a.date]; if(i!=null) days[i].load += a.load || 0 });
+  Object.entries(plannedLoads(D)).forEach(([d,l]) => { const i = idx[d]; if(i!=null) days[i].load += l });
+  return { days, idx };
+}
+/* F[i] = Σ_{s<i} carga(s)·e^(−(i−s)/τ): la sesión de un día afecta desde el día siguiente */
+function decay(loads, tau){ const out = new Float64Array(loads.length), k = Math.exp(-1/tau); let s = 0;
+  for(let i=0;i<loads.length;i++){ out[i] = s; s = (s + loads[i]) * k } return out }
+function lsq3(rows){
+  const M = [[0,0,0,0],[0,0,0,0],[0,0,0,0]];
+  rows.forEach(r => { for(let i=0;i<3;i++){ M[i][3] += r[i]*r[3]; for(let j=0;j<3;j++) M[i][j] += r[i]*r[j] } });
+  for(let c=0;c<3;c++){
+    let p = c; for(let r=c+1;r<3;r++) if(Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]]; if(Math.abs(M[c][c]) < 1e-12) return null;
+    for(let r=0;r<3;r++){ if(r===c) continue; const f = M[r][c]/M[c][c]; for(let k=c;k<4;k++) M[r][k] -= f*M[c][k] }
+  }
+  return [M[0][3]/M[0][0], M[1][3]/M[1][1], M[2][3]/M[2][2]];
+}
+const predAt = (m, i) => m.p0 + m.k1*m.F1[i] - m.k2*m.F2[i];
+function fitAt(loads, obs, t1, t2){
+  const F1 = decay(loads, t1), F2 = decay(loads, t2);
+  const c = lsq3(obs.map(o => [1, F1[o.i], -F2[o.i], o.y]));
+  if(!c || c[1] <= 0 || c[2] <= 0) return null;
+  const m = { t1, t2, p0:c[0], k1:c[1], k2:c[2], F1, F2 };
+  m.sse = obs.reduce((s,o) => s + (o.y - predAt(m,o.i))**2, 0);
+  return m;
+}
+function gridFit(loads, obs){
+  let best = null;
+  for(let t1=20; t1<=70; t1+=2) for(let t2=2; t2<=20; t2++){
+    if(t1 < t2+6) continue;
+    const m = fitAt(loads, obs, t1, t2); if(m && (!best || m.sse < best.sse)) best = m;
+  }
+  return best;
+}
+function fitModel(D){
+  const { days, idx } = dailyLoads(D, 14), todayI = idx[iso(new Date())], loads = days.map(d => d.load);
+  const obs = (D.allActivities || D.activities)
+    .filter(a => BIKE(a.type) && a.ef > 0 && (a.time||0) >= 2400 && (a.ifac==null || (a.ifac >= 55 && a.ifac <= 85)))
+    .map(a => ({ i: idx[a.date], y: a.ef })).filter(o => o.i != null && o.i <= todayI).sort((p,q) => p.i - q.i);
+  const res = { n: obs.length, days, obs, todayI };
+  if(obs.length < MIN_OBS) return res;
+  const cut = Math.floor(obs.length*0.8), train = obs.slice(0,cut), test = obs.slice(cut);
+  const rmse = (m, set) => Math.sqrt(set.reduce((s,o) => s + (o.y - predAt(m,o.i))**2, 0) / set.length);
+  const pTrain = gridFit(loads, train), sTrain = fitAt(loads, train, STD.t1, STD.t2);
+  const m = gridFit(loads, obs), std = fitAt(loads, obs, STD.t1, STD.t2);
+  if(!m) return { ...res, fail:true };
+  const mean = obs.reduce((s,o) => s + o.y, 0) / obs.length, sst = obs.reduce((s,o) => s + (o.y-mean)**2, 0) || 1;
+  const testP = pTrain ? rmse(pTrain, test) : null, testS = sTrain ? rmse(sTrain, test) : null;
+  /* Tiempos característicos de la respuesta a una sesión */
+  const a = m.t1*m.t2/(m.t1-m.t2);
+  const tn = m.k2 > m.k1 ? a*Math.log(m.k2/m.k1) : 0;
+  const tp = m.k2*m.t1 > m.k1*m.t2 ? a*Math.log((m.k2*m.t1)/(m.k1*m.t2)) : 0;
+  /* Pronósticos: con el plan cargado y con descanso total desde hoy */
+  const pred = days.map((_,i) => predAt(m,i)), now = pred[todayI];
+  const restLoads = loads.map((l,i) => i > todayI ? 0 : l);
+  const mr = { ...m, F1: decay(restLoads, m.t1), F2: decay(restLoads, m.t2) };
+  const predRest = days.map((_,i) => predAt(mr,i));
+  const argmax = arr => { let b = todayI+1; for(let i=todayI+1;i<days.length;i++) if(arr[i] > arr[b]) b = i; return b };
+  const pk = argmax(pred), rk = argmax(predRest);
+  return { ...res, ok:true, m, std, use: testP!=null && (testS==null || testP <= testS),
+    r2P: 1 - m.sse/sst, r2S: std ? 1 - std.sse/sst : null, testP, testS, nTest: test.length,
+    tn: Math.round(tn), tp: Math.round(tp), pred, predRest, now,
+    peakPlan: { date: days[pk].date, gain: (pred[pk]/now - 1)*100 },
+    peakRest: { date: days[rk].date, days: rk - todayI, gain: (predRest[rk]/now - 1)*100 },
+    hasPlan: Object.keys(plannedLoads(D)).length > 0 };
+}
+const pct = v => (v>0?"+":"") + v.toFixed(1).replace(".",",") + " %";
+function modelSummary(){
+  const M = state.model;
+  if(!M?.ok) return `Modelo de rendimiento personal: todavía no hay datos suficientes (${M?.n||0} de ${MIN_OBS} salidas válidas); usá las constantes estándar 42/7.`;
+  if(!M.use) return `Modelo de rendimiento personal: ajustado (fitness ${M.m.t1} d, fatiga ${M.m.t2} d) pero todavía no predice mejor que el estándar; usá 42/7 y tomalo solo como referencia.`;
+  return `Modelo de rendimiento personal (Banister ajustado a sus datos, valida mejor que el estándar): fitness se construye en ${M.m.t1} días (estándar 42) y la fatiga se va en ${M.m.t2} días (estándar 7). Una sesión empieza a sumar a los ${M.tn} días y su efecto máximo llega a los ${M.tp} días. Con descanso total desde hoy, su pico sería el ${M.peakRest.date} (${pct(M.peakRest.gain)}). Con el plan cargado, el mejor día de los próximos 14 es el ${M.peakPlan.date} (${pct(M.peakPlan.gain)} contra hoy). Usá estos tiempos para la descarga antes de carreras y para dimensionar los descansos.`;
 }
 
 /* ---------- Coach con IA (Claude vía API de Anthropic, llamada directa desde el navegador) ---------- */
@@ -315,6 +409,7 @@ Criterios que aplicás:
 - RPE (1–10) es cómo se sintió la sesión. Comparalo con la carga y el IF: RPE alto para una carga o IF habituales indica fatiga, mal descanso o enfermedad incipiente; RPE bajo para una sesión exigente indica que tolera más. Si faltan RPE, decilo.
 - El gimnasio (WeightTraining) suele tener carga cargada a mano y fija: tomala como aproximada y usá el RPE para estimar su costo real. No cargues piernas pesado el día antes de una sesión de calidad en bici.
 - Aprendés de la historia de este atleta: los "aprendizajes" acumulados, el historial "plan vs real" y las 52 semanas. Calibrá con eso: si suele no cumplir cierto día, no pongas calidad ahí; si su RPE real supera sistemáticamente al esperado, bajá la intensidad o el volumen; repetí los tipos de bloque que le hicieron subir la fitness sin disparar el RPE y evitá los que terminaron en caída de cumplimiento. Los aprendizajes que el atleta rechazó no se vuelven a proponer.
+- Si el "modelo de rendimiento personal" está validado, sus tiempos mandan sobre las reglas generales: la descarga previa a una carrera dura lo que indica su pico con descanso total, y los descansos se dimensionan con su constante de fatiga.
 - Respetá las carreras del calendario (RACE_A es el objetivo principal: llegar con forma de +5% a +20%, con 7–10 días de descarga previa).
 Reglas:
 - Cada afirmación se apoya en un dato concreto del contexto (fecha y número). Si falta un dato, lo decís; no inventás.
@@ -420,6 +515,7 @@ function header(D, ctx){
   return `Hoy es ${iso(new Date())} (${DOW[new Date().getDay()]}).
 Atleta: ${D.name}. FTP: ${D.ftp ?? "sin dato"} W. Umbral FC: ${D.lthr ?? "sin dato"}. FC máx: ${D.maxhr ?? "sin dato"}.
 Contexto que da el atleta: ${ctx || "no informado"}.
+${modelSummary()}
 Aprendizajes acumulados sobre este atleta: ${notes().length ? JSON.stringify(notes()) : "todavía ninguno"}.
 Aprendizajes que el atleta rechazó (no repetir): ${rejected().length ? JSON.stringify(rejected()) : "ninguno"}.
 Historial plan vs real de semanas anteriores (rpe_esperado lo fijaste vos al planificar): ${hist.length ? JSON.stringify(hist) : "todavía no hay semanas registradas"}.
@@ -534,7 +630,7 @@ function barChart(values, labels, aria){
 const shortDate = s => { const d = new Date(s+"T12:00:00"); return `${d.getDate()} ${MES[d.getMonth()]}` };
 
 /* ---------- Vistas ---------- */
-const TITLES = {hoy:"Hoy", coach:"Coach", analisis:"Análisis", actividades:"Actividades", plan:"Plan", bienestar:"Bienestar", ajustes:"Ajustes"};
+const TITLES = {hoy:"Hoy", modelo:"Modelo", coach:"Coach", analisis:"Análisis", actividades:"Actividades", plan:"Plan", bienestar:"Bienestar", ajustes:"Ajustes"};
 const LIGHT = { verde:["--good","Verde"], amarillo:["--warn","Amarillo"], rojo:["--bad","Rojo"] };
 const VERD = { "bien":["--good","Rindió bien"], "normal":["--ctl","Normal"], "por debajo":["--bad","Por debajo"] };
 const busyBtn = (id, label, busy) => `<button class="btn primary" id="${id}" ${busy?"disabled":""}>${busy?"Analizando… (puede tardar 20–40 s)":label}</button>`;
@@ -651,7 +747,7 @@ async function doWeek(){
     (r.dias||[]).forEach(d => { const prev = old?.r.dias.find(x => x.fecha===d.fecha); if(prev?.eventId){ d.eventId = prev.eventId; d.dirty = true } });
     cacheSet("coach.week", {at:Date.now(), r});
   }catch(e){ state.aiError="week"; state.aiErrorMsg=e.message }
-  state.busy=null; render();
+  state.busy=null; try{ state.model = fitModel(state.data) }catch(_){} render();
 }
 async function sendWeek(){
   const wk = cacheGet("coach.week"); if(!wk) return;
@@ -669,6 +765,58 @@ async function sendWeek(){
   cacheSet("coach.week", wk);
   state.sendMsg = fail.length ? {ok:false, t:`Se mandaron ${ok}. Fallaron: ${fail.join(" · ")}`} : {ok:true, t:`Listo: ${ok} entrenamientos en el calendario de Intervals. Se sincronizan con el Garmin en la próxima conexión.`};
   state.busy=null; await refresh();
+}
+function modelChart(M){
+  const W=340, H=190, L=34, R=8, T=10, B=22;
+  const from = Math.max(0, M.todayI-180), to = M.days.length-1;
+  const pts = M.obs.filter(o => o.i >= from);
+  const ys = [...pts.map(o=>o.y), ...M.pred.slice(from).filter(v=>isFinite(v))];
+  let lo = Math.min(...ys), hi = Math.max(...ys); const pad = (hi-lo)*.1 || .05; lo -= pad; hi += pad;
+  const x = i => L + (i-from)*(W-L-R)/(to-from), y = v => T + (hi-v)*(H-T-B)/(hi-lo);
+  let g = "";
+  for(let k=0;k<=4;k++){ const v = lo + (hi-lo)*k/4; g += `<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-4}" y="${y(v)+3}" text-anchor="end">${v.toFixed(2).replace(".",",")}</text>` }
+  g += `<line x1="${x(M.todayI)}" x2="${x(M.todayI)}" y1="${T}" y2="${H-B}" stroke="var(--muted)" stroke-dasharray="2 3"/><text x="${x(M.todayI)}" y="${T+8}" text-anchor="middle">hoy</text>`;
+  for(let k=0;k<5;k++){ const i = Math.round(from + (M.todayI-from)*k/4); g += `<text x="${x(i)}" y="${H-6}" text-anchor="middle">${shortDate(M.days[i].date)}</text>` }
+  const path = (arr, a, b) => { let d=""; for(let i=a;i<=b;i++) d += (d?"L":"M") + x(i).toFixed(1) + "," + y(arr[i]).toFixed(1); return d };
+  pts.forEach(o => g += `<circle cx="${x(o.i).toFixed(1)}" cy="${y(o.y).toFixed(1)}" r="2.6" fill="var(--muted)" opacity=".7"/>`);
+  g += `<path d="${path(M.pred, from, M.todayI)}" fill="none" stroke="var(--ctl)" stroke-width="2"/>`;
+  g += `<path d="${path(M.predRest, M.todayI, to)}" fill="none" stroke="var(--good)" stroke-width="2" stroke-dasharray="4 3"/>`;
+  if(M.hasPlan) g += `<path d="${path(M.pred, M.todayI, to)}" fill="none" stroke="var(--ctl)" stroke-width="2" stroke-dasharray="4 3"/>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Rendimiento medido y modelado, con pronóstico de 14 días">${g}</svg>`;
+}
+function viewModelo(D){
+  const M = state.model;
+  const how = `<section class="card"><h2>Cómo funciona</h2>
+    <p>Cada entrenamiento suma fitness y fatiga a la vez. La fatiga se va rápido y la fitness queda más tiempo; el rendimiento es la diferencia. El modelo estándar asume 42 días para la fitness y 7 para la fatiga en todos los atletas. Este modelo busca los valores que mejor explican el rendimiento real de ${esc(D.name)} a lo largo de su último año.</p>
+    <div class="block"><h3>Qué mide como rendimiento</h3><p>La eficiencia aeróbica: potencia normalizada dividida por la frecuencia cardíaca, en salidas de bici de 40 minutos o más a intensidad moderada (IF entre 55 y 85 %). Más vatios por latido es mejor forma.</p></div>
+    <div class="block"><h3>Cómo se entrena y se valida</h3><p>Se reentrena solo cada vez que se abre la app. Para validarlo, se ajusta con el 80 % más antiguo de las sesiones y se mide el error en el 20 % más reciente, comparado con el modelo estándar. El coach lo usa solo si predice mejor.</p></div></section>`;
+  if(!M) return how;
+  if(!M.ok) return `${demoNote()}<section class="card"><h2>Modelo personal</h2>
+    <p class="lead" style="margin-top:0">Faltan datos: ${M.n} de ${MIN_OBS} salidas válidas.</p>
+    <p class="note" style="margin-top:8px">Cuentan las salidas de bici de 40 minutos o más, con potencia y frecuencia cardíaca, a intensidad moderada. Cuando llegue a ${MIN_OBS}, el modelo se entrena solo.</p></section>${how}`;
+  const f2 = v => v==null ? "—" : v.toFixed(3).replace(".",",");
+  const r2 = v => v==null ? "—" : v.toFixed(2).replace(".",",");
+  return `${demoNote()}
+  <section class="card"><h2>Modelo personal · ${M.n} salidas</h2>
+    <span class="light" style="color:var(${M.use?"--good":"--warn"})">${M.use ? "Validado: el coach lo usa" : "En observación"}</span>
+    <p class="lead">${M.use ? `Predice mejor que el modelo estándar en sus ${M.nTest} salidas más recientes.` : `Todavía no predice mejor que el estándar en sus ${M.nTest} salidas más recientes. El coach sigue con 42/7 hasta que haya más datos.`}</p>
+    <div class="stats" style="margin-top:14px">
+      <div class="stat"><small>Fitness se construye en</small><b>${M.m.t1}</b> <em>días</em><br><em>estándar: 42</em></div>
+      <div class="stat"><small>Fatiga se va en</small><b>${M.m.t2}</b> <em>días</em><br><em>estándar: 7</em></div>
+      <div class="stat"><small>Error de prueba</small><b>${f2(M.testP)}</b><br><em>estándar: ${f2(M.testS)}</em></div>
+      <div class="stat"><small>R² con todo el año</small><b>${r2(M.r2P)}</b><br><em>estándar: ${r2(M.r2S)}</em></div>
+    </div></section>
+  <section class="card"><h2>Qué significa para él</h2><ul class="bul">
+    <li><b>Una sesión empieza a sumar a los ${M.tn} días</b><span class="ev">Antes de eso, su fatiga pesa más que la fitness que aporta.</span></li>
+    <li><b>Su efecto máximo llega a los ${M.tp} días</b><span class="ev">Es la referencia para la última sesión dura antes de una carrera.</span></li>
+    <li><b>Con descanso total desde hoy, su pico sería el ${shortDate(M.peakRest.date)}</b><span class="ev">${pct(M.peakRest.gain)} de rendimiento contra hoy, en ${M.peakRest.days} días. Es el largo natural de su descarga.</span></li>
+    ${M.hasPlan ? `<li><b>Con el plan cargado, su mejor día de las próximas 2 semanas es el ${shortDate(M.peakPlan.date)}</b><span class="ev">${pct(M.peakPlan.gain)} contra hoy.</span></li>` : ""}
+  </ul></section>
+  <section class="card"><h2>Rendimiento medido y modelado</h2>
+    ${modelChart(M)}
+    <div class="legend"><span style="--c:var(--muted)"><i></i>Medido (vatios por latido)</span><span style="--c:var(--ctl)"><i></i>Modelo${M.hasPlan?" y plan":""}</span><span style="--c:var(--good)"><i></i>Con descanso total</span></div>
+  </section>
+  ${how}`;
 }
 function viewAnalisis(D){
   const act = D.activities.find(a => String(a.id)===String(state.actId));
@@ -875,7 +1023,7 @@ function render(){
   let html = "";
   if(state.error && v!=="ajustes") html += `<section class="card err"><p>${esc(state.error)}</p></section>`;
   if(v==="ajustes") html += viewAjustes();
-  else if(state.data) html += ({hoy:viewHoy, coach:viewCoach, analisis:viewAnalisis, actividades:viewActividades, plan:viewPlan, bienestar:viewBienestar})[v](state.data);
+  else if(state.data) html += ({hoy:viewHoy, modelo:viewModelo, coach:viewCoach, analisis:viewAnalisis, actividades:viewActividades, plan:viewPlan, bienestar:viewBienestar})[v](state.data);
   else if(!state.error) html += `<section class="card"><p class="note">Cargando datos de Intervals…</p></section>`;
   $("#main").innerHTML = html;
   bindAjustes();
@@ -895,6 +1043,7 @@ async function refresh(){
     catch(e){ state.error = e.message; state.demo=false;
       try{ const c = JSON.parse(store.get("cache")||"null"); if(c){ state.data = c.data; state.error += ` Se muestran los últimos datos guardados (${new Date(c.at).toLocaleString("es-AR")}).` } }catch(_){} }
   }
+  try{ state.model = state.data ? fitModel(state.data) : null }catch(e){ state.model = null }
   $("#main").classList.remove("loading");
   render();
 }
