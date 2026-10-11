@@ -6,7 +6,7 @@ App web para el celular conectada a Intervals.icu, con un coach de IA (Claude) q
 
 1. Abrir la app desde su dirección de GitHub Pages en el celular y elegir "Agregar a pantalla de inicio".
 2. En **Ajustes**, cargar el ID de atleta y la clave de API de Intervals (Settings → Developer Settings).
-3. En **Ajustes → Coach con IA**, cargar la clave de la API de Anthropic (console.anthropic.com → API Keys) y el contexto del atleta: objetivo, carreras, horas por semana, días disponibles y lesiones.
+3. En **Ajustes → Coach con IA**, cargar la clave de la API de Anthropic (platform.claude.com → Settings → API keys) y el contexto del atleta: objetivo, carreras, horas por semana, días disponibles y lesiones.
 
 ## Secciones
 
