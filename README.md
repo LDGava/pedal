@@ -11,6 +11,7 @@ App web para el celular conectada a Intervals.icu, con un coach de IA (Claude) q
 ## Secciones
 
 - **Hoy:** forma, fitness, fatiga, carga semanal y resumen del coach.
+- **Modelo:** modelo de rendimiento de Banister ajustado a los datos del atleta (constantes propias de fitness y fatiga), validado contra el estándar 42/7 y usado por el coach cuando predice mejor.
 - **Coach:** plan de martes a lunes (se arma los lunes), revisión diaria con ajustes, envío al Garmin vía el calendario de Intervals, aprendizajes del atleta e historial plan contra real.
 - **Actividades:** últimas 8 semanas con análisis por sesión.
 - **Plan:** calendario de Intervals de los próximos 14 días.
