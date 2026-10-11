@@ -1,0 +1,965 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pedal">
+<meta name="theme-color" content="#0f1720">
+<title>Pedal · Intervals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: drawer lateral izquierdo (fijo y colapsable en pantallas anchas), contenido en una columna de tarjetas por sección */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --line:#dde3ea; --fg:#14202b; --muted:#5d6b78;
+  --accent:#0b6e8a;           /* asfalto mojado / marca */
+  --ctl:#2563c9; --atl:#b0368f; --tsb:#c88a12;
+  --good:#1f8a4c; --warn:#c88a12; --bad:#c23b2e; --grey:#8a96a2;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --side:244px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1720; --surface:#17222d; --line:#263544; --fg:#e6edf3; --muted:#93a3b1;
+  --accent:#3fb3d1; --ctl:#5b93f0; --atl:#e06ac0; --tsb:#f0b43c;
+  --good:#3fbf74; --warn:#f0b43c; --bad:#f06a5c; --grey:#7c8a97; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1720; --surface:#17222d; --line:#263544; --fg:#e6edf3; --muted:#93a3b1;
+  --accent:#3fb3d1; --ctl:#5b93f0; --atl:#e06ac0; --tsb:#f0b43c;
+  --good:#3fbf74; --warn:#f0b43c; --bad:#f06a5c; --grey:#7c8a97; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--body);-webkit-tap-highlight-color:transparent}
+button,input{font:inherit;color:inherit}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Barra superior */
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
+  padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 10px;background:var(--bg);border-bottom:1px solid var(--line)}
+.top h1{margin:0;font:600 22px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.iconbtn{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;cursor:pointer;flex:none}
+.iconbtn svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.badge{font:600 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:5px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);flex:none}
+.badge.live{color:var(--good);border-color:currentColor}
+.badge.demo{color:var(--warn);border-color:currentColor}
+
+/* Sidebar */
+.side{position:fixed;inset:0 auto 0 0;width:var(--side);z-index:40;background:var(--surface);border-right:1px solid var(--line);
+  padding:calc(env(safe-area-inset-top,0px) + 18px) 12px calc(env(safe-area-inset-bottom,0px) + 18px);
+  display:flex;flex-direction:column;gap:4px;transform:translateX(-100%);transition:transform .22s ease}
+.side.open{transform:none}
+.brand{display:flex;align-items:baseline;gap:8px;padding:0 10px 14px}
+.brand b{font:700 28px/1 var(--display);letter-spacing:.04em;text-transform:uppercase}
+.brand span{font:500 12px var(--mono);color:var(--muted)}
+.nav{display:flex;align-items:center;gap:12px;padding:12px 10px;border-radius:10px;border:0;background:none;text-align:left;cursor:pointer;font-weight:500}
+.nav svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.nav[aria-current="page"]{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);font-weight:600}
+.side .foot{margin-top:auto;padding:0 10px;font-size:12px;color:var(--muted)}
+.scrim{position:fixed;inset:0;z-index:30;background:rgb(0 0 0 / .4)}
+@media (min-width:900px){
+  .scrim{display:none!important}
+  .side{transform:none}
+  body.collapsed .side{transform:translateX(-100%)}
+  .shell{margin-left:var(--side);transition:margin .22s ease}
+  body.collapsed .shell{margin-left:0}
+}
+
+/* Contenido */
+main{padding-inline:16px;padding-block:16px calc(env(safe-area-inset-bottom,0px) + 32px);max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}
+.card h2{margin:0 0 12px;font:600 15px/1.2 var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-wrap:balance}
+.note{font-size:13px;color:var(--muted);margin:0}
+.err{border-color:var(--bad);color:var(--bad)}
+.err p{margin:0}
+
+/* Forma de hoy */
+.form-hero{display:grid;grid-template-columns:1fr auto;gap:8px 16px;align-items:end}
+.big{font:700 64px/0.9 var(--display);font-variant-numeric:tabular-nums}
+.zone{font:600 14px var(--display);letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border-radius:8px;justify-self:end}
+.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.trio div{border-top:3px solid var(--c);padding-top:6px}
+.trio small{display:block;font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.trio b{font:600 26px/1.1 var(--display);font-variant-numeric:tabular-nums}
+.zonebar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:14px;position:relative}
+.zonebar i{display:block}
+.zonebar .pin{position:absolute;top:-4px;width:3px;height:16px;background:var(--fg);border-radius:2px;transform:translateX(-50%)}
+.zonelabels{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--muted);margin-top:6px}
+
+/* Gráficos */
+.chart{width:100%;height:auto;display:block}
+.chart text{fill:var(--muted);font:10px var(--mono)}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font:12px var(--mono);color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:10px;height:3px;border-radius:2px;background:var(--c);margin-right:6px;vertical-align:middle}
+
+/* Listas */
+.list{display:flex;flex-direction:column}
+.row{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.row:first-child{border-top:0;padding-top:0}
+.date{text-align:center;font:600 11px var(--mono);color:var(--muted);text-transform:uppercase;line-height:1.2}
+.date b{display:block;font:700 22px/1 var(--display);color:var(--fg)}
+.row .t{min-width:0}
+.row .t b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .t span{font:12px var(--mono);color:var(--muted)}
+.load{font:600 20px var(--display);font-variant-numeric:tabular-nums;text-align:right}
+.load small{display:block;font:10px var(--mono);color:var(--muted);letter-spacing:.05em}
+.chip{display:inline-block;font:600 10px var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:5px;border:1px solid currentColor;margin-right:6px;vertical-align:1px}
+
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.stat small{display:block;font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.stat b{font:600 30px/1.1 var(--display);font-variant-numeric:tabular-nums}
+.stat em{font:normal 12px var(--mono);color:var(--muted)}
+
+/* Ajustes */
+label{display:block;font:600 12px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+input[type=text],input[type=password]{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font:15px var(--mono)}
+.btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.btn{padding:11px 16px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.btn.danger{color:var(--bad)}
+.msg{margin-top:12px;font-size:14px}
+.msg.ok{color:var(--good)} .msg.bad{color:var(--bad)}
+.howto{margin:0;padding-left:18px;color:var(--muted);font-size:14px}
+.howto li{margin:4px 0}
+.loading{opacity:.55;pointer-events:none}
+textarea,select{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font:15px var(--body);color:inherit}
+textarea{min-height:110px;resize:vertical}
+.light{display:inline-flex;align-items:center;gap:8px;font:600 14px var(--display);letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border-radius:8px;border:1px solid currentColor}
+.light::before{content:"";width:10px;height:10px;border-radius:50%;background:currentColor}
+.lead{font:600 20px/1.3 var(--display);margin:12px 0 0;text-wrap:balance}
+.block{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.block h3{margin:0 0 6px;font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.block p{margin:0}
+.bul{margin:0;padding-left:18px}
+.bul li{margin:6px 0}
+.bul li .ev{display:block;font-size:13px;color:var(--muted)}
+.mini{padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font:600 12px var(--mono);color:var(--accent);cursor:pointer;margin-top:6px}
+.row .act{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.rpe-item{padding:12px 0;border-top:1px solid var(--line)}
+.rpe-item:first-child{border-top:0;padding-top:0}
+.rpe-head{display:grid;grid-template-columns:44px 1fr;gap:12px;align-items:center}
+.rpe-head .t{min-width:0}
+.rpe-head .t b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rpe-head .t span{font:12px var(--mono);color:var(--muted)}
+.rpe-scale{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;margin-top:10px}
+.rpe-btn{height:38px;min-width:0;padding:0;border-radius:8px;border:1px solid var(--line);background:var(--bg);font:600 16px var(--display);cursor:pointer;
+  color:color-mix(in srgb,var(--good) calc(100% - var(--i,0)*10%),var(--bad))}
+.rpe-btn:hover,.rpe-btn:focus-visible{border-color:currentColor}
+.rpe-ends{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--muted);margin-top:4px}
+.notes{padding-left:0;list-style:none}
+.notes li{display:flex;gap:10px;align-items:flex-start}
+.notes li span{flex:1;min-width:0}
+.x{flex:none;width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--muted);cursor:pointer;font-size:12px}
+pre.wo{margin:8px 0 0;padding:10px;border-radius:8px;background:var(--bg);border:1px solid var(--line);font:12px/1.5 var(--mono);white-space:pre-wrap;overflow-x:auto}
+.stamp{font:11px var(--mono);color:var(--muted);margin-top:10px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<aside class="side" id="side" aria-label="Secciones">
+  <div class="brand"><b>Pedal</b><span>intervals.icu</span></div>
+  <button class="nav" data-view="hoy"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Hoy</button>
+  <button class="nav" data-view="actividades"><svg viewBox="0 0 24 24"><circle cx="6" cy="16" r="4"/><circle cx="18" cy="16" r="4"/><path d="M6 16l4-8h5l3 8M10 8l2 8h-6"/></svg>Actividades</button>
+  <button class="nav" data-view="coach"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>Coach</button>
+  <button class="nav" data-view="plan"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Plan</button>
+  <button class="nav" data-view="bienestar"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></svg>Bienestar</button>
+  <button class="nav" data-view="ajustes"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Ajustes</button>
+  <div class="foot" id="sidefoot">Sin conectar</div>
+</aside>
+<div class="scrim" id="scrim" hidden></div>
+
+<div class="shell">
+  <header class="top">
+    <button class="iconbtn" id="menu" aria-label="Abrir o cerrar menú"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <h1 id="title">Hoy</h1>
+    <span class="badge" id="mode">—</span>
+    <button class="iconbtn" id="refresh" aria-label="Actualizar datos"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
+  </header>
+  <main id="main"></main>
+</div>
+
+<script>
+(() => {
+"use strict";
+const API = "https://intervals.icu/api/v1";
+const store = {
+  get(k){ try{ return localStorage.getItem("pedal."+k) }catch(e){ return null } },
+  set(k,v){ try{ localStorage.setItem("pedal."+k,v) }catch(e){} },
+  del(k){ try{ localStorage.removeItem("pedal."+k) }catch(e){} }
+};
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const iso = d => d.toISOString().slice(0,10);
+const addDays = (d,n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x };
+const DOW = ["dom","lun","mar","mié","jue","vie","sáb"];
+const MES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+const fmtDur = s => { if(!s) return "—"; const h=Math.floor(s/3600), m=Math.round(s%3600/60); return h? `${h}h${String(m).padStart(2,"0")}` : `${m}min` };
+const fmtKm = m => m ? (m/1000).toFixed(1).replace(".",",")+" km" : "";
+const n0 = v => v==null || isNaN(v) ? "—" : Math.round(v);
+
+let state = { view: store.get("view") || "hoy", data: null, demo: false, error: null, busy: null, aiError: null, actId: null };
+if(state.view==="analisis") state.view = "actividades";
+
+/* ---------- Zonas de forma (criterio de intervals.icu, sobre % de forma = TSB/CTL) ---------- */
+const ZONES = [
+  {max:-30, name:"Riesgo alto", c:"--bad"},
+  {max:-10, name:"Óptimo", c:"--good"},
+  {max:5,   name:"Zona gris", c:"--grey"},
+  {max:20,  name:"Fresco", c:"--ctl"},
+  {max:Infinity, name:"Transición", c:"--warn"}
+];
+const zoneOf = pct => ZONES.find(z => pct < z.max) || ZONES[ZONES.length-1];
+
+/* ---------- API ---------- */
+function creds(){ return { key: store.get("key"), athlete: (store.get("athlete") || "0").trim() } }
+async function api(path, params, opts){
+  const {key, athlete} = creds();
+  const url = new URL(path.startsWith("/activity/") ? `${API}${path}` : `${API}/athlete/${encodeURIComponent(athlete)}${path}`);
+  Object.entries(params||{}).forEach(([k,v]) => url.searchParams.set(k,v));
+  let r;
+  try{
+    const headers = { Authorization: "Basic " + btoa("API_KEY:" + key), Accept: "application/json" };
+    if(opts?.body) headers["Content-Type"] = "application/json";
+    r = await fetch(url, { method: opts?.method || "GET", headers, body: opts?.body ? JSON.stringify(opts.body) : undefined });
+  }catch(e){
+    throw new Error("No se pudo llegar a intervals.icu. Revisá la conexión a internet. Si tenés conexión, el navegador bloqueó la llamada: abrí la app desde su dirección web (https), no como archivo suelto.");
+  }
+  if(r.status===401||r.status===403) throw new Error("Intervals rechazó la clave o el ID de atleta. Revisá ambos en Ajustes (el ID lleva la i adelante, por ejemplo i30352, o 0 para el dueño de la clave).");
+  if(!r.ok) throw new Error(`Intervals respondió ${r.status}. Probá de nuevo en un rato.`);
+  return r.json();
+}
+async function loadLive(){
+  const today = new Date();
+  const [profile, wellness, activities, events] = await Promise.all([
+    api("", {}),
+    api("/wellness", { oldest: iso(addDays(today,-365)), newest: iso(today) }),
+    api("/activities", { oldest: iso(addDays(today,-365)), newest: iso(today) }),
+    api("/events", { oldest: iso(today), newest: iso(addDays(today,14)) }).catch(() => [])
+  ]);
+  return normalize(profile, wellness, activities, events);
+}
+function normalize(profile, wellness, activities, events){
+  const w = (wellness||[]).map(x => ({
+    date: x.id, ctl: x.ctl, atl: x.atl, hrv: x.hrv, rhr: x.restingHR, weight: x.weight, sleep: x.sleepSecs
+  })).filter(x => x.date).sort((a,b) => a.date.localeCompare(b.date));
+  const a = (activities||[]).map(x => ({
+    id: x.id, rpe: x.icu_rpe, feel: x.feel, decoupling: x.decoupling,
+    date: (x.start_date_local||"").slice(0,10), name: x.name || x.type, type: x.type,
+    time: x.moving_time, dist: x.distance, load: x.icu_training_load,
+    np: x.icu_weighted_avg_watts, hr: x.average_heartrate, ifac: x.icu_intensity, elev: x.total_elevation_gain
+  })).sort((p,q) => q.date.localeCompare(p.date));
+  const e = (events||[]).map(x => ({
+    date: (x.start_date_local||"").slice(0,10), name: x.name, cat: x.category, type: x.type,
+    time: x.moving_time, load: x.icu_training_load
+  })).filter(x => x.cat !== "NOTE").sort((p,q) => p.date.localeCompare(q.date));
+  const ride = (profile?.sportSettings||[]).find(s => (s.types||[]).includes("Ride")) || {};
+  const since56 = iso(addDays(new Date(), -56));
+  return { name: profile?.name || profile?.firstname || "Atleta", id: profile?.id, ftp: ride.ftp, lthr: ride.lthr, maxhr: ride.max_hr,
+    wellness: w, allActivities: a, activities: a.filter(x => x.date >= since56), events: e };
+}
+
+/* ---------- Datos de ejemplo (se muestran sin clave, marcados como ejemplo) ---------- */
+function demoData(){
+  const today = new Date(); const w=[], a=[]; let ctl=48, atl=50; let seed=7;
+  const rnd = () => (seed = (seed*9301+49297)%233280)/233280;
+  const names = {1:"Fondo zona 2",2:"Intervalos 4×8 umbral",4:"Recuperación activa",6:"Salida larga con grupo",0:"Sweet spot 3×15"};
+  for(let i=119;i>=0;i--){
+    const d = addDays(today,-i), dow = d.getDay();
+    const block = Math.floor((119-i)/28)%4===3 ? .6 : 1;
+    let load = 0;
+    if(dow===1||dow===3) load = 55+rnd()*20;
+    if(dow===2||dow===0) load = 85+rnd()*30;
+    if(dow===6) load = 150+rnd()*60;
+    load *= block;
+    ctl += (load-ctl)/42; atl += (load-atl)/7;
+    w.push({date:iso(d), ctl:+ctl.toFixed(1), atl:+atl.toFixed(1), hrv: Math.round(62+rnd()*14-(atl-ctl)*.15), rhr: Math.round(48+rnd()*4+(atl-ctl)*.05), weight: 71.5+rnd()*.8, sleep: 6.4*3600+rnd()*7200});
+    if(load>0 && i<56){
+      const t = load/ (dow===6?62:dow===2||dow===0?78:50) * 3600;
+      a.push({id:"demo-"+i, rpe: i<4 ? undefined : dow===2?8:dow===6?6:4, date:iso(d), name:names[dow===3?1:dow]||"Rodaje", type:"Ride", time:t, dist:t*(dow===4?7.5:8.6), load:Math.round(load),
+        np: Math.round(dow===2?262:dow===0?248:dow===6?214:180), hr: Math.round(dow===2?156:dow===6?142:128), ifac: dow===2?88:dow===0?84:dow===6?74:62, elev: Math.round(200+rnd()*900)});
+    }
+  }
+  const e=[]; for(let i=1;i<=14;i++){ const d=addDays(today,i), dow=d.getDay();
+    if(dow===2) e.push({date:iso(d),name:"5×6 VO2max",cat:"WORKOUT",type:"Ride",time:5100,load:92});
+    if(dow===4) e.push({date:iso(d),name:"Sweet spot 2×20",cat:"WORKOUT",type:"Ride",time:5400,load:88});
+    if(dow===6 && i>7) e.push({date:iso(d),name:"Gran Fondo (ejemplo)",cat:"RACE_A",type:"Ride",time:14400,load:240});
+    else if(dow===6) e.push({date:iso(d),name:"Salida larga 3h30",cat:"WORKOUT",type:"Ride",time:12600,load:170});
+  }
+  a.reverse();
+  return { name:"Atleta de ejemplo", ftp:275, wellness:w, allActivities:a, activities:a, events:e };
+}
+
+/* ---------- Coach con IA (Claude vía API de Anthropic, llamada directa desde el navegador) ---------- */
+const AI_URL = "https://api.anthropic.com/v1/messages";
+const MODELS = [
+  ["claude-sonnet-5-5","Sonnet: equilibrio entre calidad y costo"],
+  ["claude-opus-5-5","Opus: análisis más profundo, más caro"],
+  ["claude-haiku-4-5-20251001","Haiku: más rápido y barato"]
+];
+function aiCfg(){ return { key: store.get("aikey"), model: store.get("aimodel") || MODELS[0][0], ctx: store.get("aictx") || "" } }
+const COACH_SYS = `Sos un entrenador de ciclismo con formación en fisiología del ejercicio. Trabajás con datos de intervals.icu:
+- CTL = fitness (promedio de carga de 42 días), ATL = fatiga (7 días), TSB = CTL − ATL = forma. "load" es la carga de la sesión (equivalente a TSS).
+- NP = potencia normalizada, IF = intensidad respecto del FTP (en %), rpe = esfuerzo percibido 1–10, decoupling = deriva FC/potencia en %.
+Criterios que aplicás:
+- Forma en % = TSB/CTL. Menos de −30%: riesgo alto. −30% a −10%: carga productiva. −10% a +5%: zona gris. +5% a +20%: fresco, ideal para competir. Más de +20%: pierde forma.
+- Una rampa de CTL sostenida de más de 6–8 puntos por semana es agresiva.
+- HRV por debajo de su promedio de 3 semanas durante 2–3 días, FC en reposo 5 ppm o más por encima de lo habitual, o sueño corto: fatiga acumulada, estrés o enfermedad incipiente.
+- Un mal rendimiento se explica comparando con sesiones similares previas del mismo atleta: forma del día, carga de los 3–7 días anteriores, HRV, FC en reposo, sueño, deriva cardíaca, RPE alto para la potencia, o una sesión planificada por encima de su nivel actual.
+- RPE (1–10) es cómo se sintió la sesión. Comparalo con la carga y el IF: RPE alto para una carga o IF habituales indica fatiga, mal descanso o enfermedad incipiente; RPE bajo para una sesión exigente indica que tolera más. Si faltan RPE, decilo.
+- El gimnasio (WeightTraining) suele tener carga cargada a mano y fija: tomala como aproximada y usá el RPE para estimar su costo real. No cargues piernas pesado el día antes de una sesión de calidad en bici.
+- Aprendés de la historia de este atleta: los "aprendizajes" acumulados, el historial "plan vs real" y las 52 semanas. Calibrá con eso: si suele no cumplir cierto día, no pongas calidad ahí; si su RPE real supera sistemáticamente al esperado, bajá la intensidad o el volumen; repetí los tipos de bloque que le hicieron subir la fitness sin disparar el RPE y evitá los que terminaron en caída de cumplimiento. Los aprendizajes que el atleta rechazó no se vuelven a proponer.
+- Respetá las carreras del calendario (RACE_A es el objetivo principal: llegar con forma de +5% a +20%, con 7–10 días de descarga previa).
+Reglas:
+- Cada afirmación se apoya en un dato concreto del contexto (fecha y número). Si falta un dato, lo decís; no inventás.
+- Ante señales que pueden ser de salud (FC en reposo muy alta varios días, HRV que se desploma), recomendás descanso y consulta médica, sin diagnosticar.
+- Español rioplatense, directo y concreto, sin relleno.
+- Respondés SOLO con JSON válido, sin texto antes ni después y sin bloques de código.`;
+
+async function askClaude(user){
+  const {key, model} = aiCfg();
+  if(!key) throw new Error("Falta la clave de Claude. Cargala en Ajustes, en la sección Coach con IA.");
+  let r;
+  try{
+    r = await fetch(AI_URL, { method:"POST", headers:{
+      "content-type":"application/json", "x-api-key":key, "anthropic-version":"2023-06-01",
+      "anthropic-dangerous-direct-browser-access":"true" },
+      body: JSON.stringify({ model, max_tokens: 3000, system: COACH_SYS, messages:[{role:"user", content:user}] }) });
+  }catch(e){ throw new Error("No se pudo llegar a Claude. Revisá la conexión a internet.") }
+  const j = await r.json().catch(() => null);
+  if(r.status===401) throw new Error("Claude rechazó la clave. Revisala en Ajustes.");
+  if(r.status===429) throw new Error("Claude está limitando pedidos en este momento. Probá en un minuto.");
+  if(!r.ok) throw new Error(`Claude respondió ${r.status}: ${j?.error?.message || "error desconocido"}. Si el modelo no existe en tu cuenta, elegí otro en Ajustes.`);
+  const text = (j?.content||[]).filter(b => b.type==="text").map(b => b.text).join("");
+  const s = text.indexOf("{"), e = text.lastIndexOf("}");
+  try{ return JSON.parse(text.slice(s, e+1)) }
+  catch(_){ throw new Error("La respuesta de Claude vino en un formato inesperado. Probá de nuevo.") }
+}
+
+/* Resumen compacto de los datos para el prompt */
+function compactData(D, days){
+  const w = D.wellness.slice(-days).map(x => ({ d:x.date, ctl:r1(x.ctl), atl:r1(x.atl), tsb:r1(x.ctl-x.atl), hrv:x.hrv??undefined, rhr:x.rhr??undefined, sueno_h: x.sleep? r1(x.sleep/3600):undefined, peso: x.weight? r1(x.weight):undefined }));
+  const a = D.activities.map(x => ({ d:x.date, tipo:x.type, nombre:x.name, min: x.time?Math.round(x.time/60):undefined, km: x.dist? r1(x.dist/1000):undefined, load:x.load, np:x.np, fc: x.hr?Math.round(x.hr):undefined, if:x.ifac? r1(x.ifac):undefined, rpe:x.rpe, decoupling: x.decoupling!=null? r1(x.decoupling):undefined }));
+  const e = D.events.map(x => ({ d:x.date, nombre:x.name, categoria:x.cat, tipo:x.type, min: x.time?Math.round(x.time/60):undefined, load:x.load }));
+  return { wellness:w, actividades:a, planificado:e };
+}
+const r1 = v => v==null || isNaN(v) ? undefined : Math.round(v*10)/10;
+
+/* Semana de entrenamiento: se planifica el lunes, de martes a lunes */
+function weekRange(today = new Date()){
+  const t = new Date(today); t.setHours(12,0,0,0);
+  const isMon = t.getDay()===1;
+  const start = isMon ? addDays(t,1) : t;
+  const daysToMon = ((1 - t.getDay()) + 7) % 7 || 7;
+  const end = addDays(t, daysToMon);
+  return { start: iso(start), end: iso(end) };
+}
+const WORKOUT_SYNTAX = `Campo "workout" (solo para bici: tipo Ride o VirtualRide): texto en la sintaxis de entrenamientos de intervals.icu, que lo convierte en un entrenamiento estructurado y lo manda al Garmin. Reglas:
+- Cada paso es una línea que empieza con "- ", duración (m = minutos, s = segundos, h = horas) y objetivo en % del FTP, por ejemplo "- 10m 55-65%".
+- Las secciones van separadas por una línea en blanco y llevan un título; una repetición se escribe con el título terminado en "Nx", por ejemplo "Bloque principal 3x".
+- Se puede sumar cadencia al final del paso: "- 5m 90% 95rpm".
+Ejemplo:
+Entrada en calor
+- 10m 50-65%
+- 3m 85%
+
+Bloque principal 3x
+- 12m 92-95%
+- 5m 55%
+
+Vuelta a la calma
+- 10m 50%
+Para gimnasio, descanso u otras actividades, "workout" va vacío.`;
+const DIA_SHAPE = `{"fecha":"YYYY-MM-DD","tipo":"Ride|VirtualRide|WeightTraining|Run|Descanso","sesion":"nombre corto","detalle":"objetivo de la sesión en una línea","min":0,"load":0,"rpe_esperado":0,"workout":"texto en sintaxis intervals o vacío"}`;
+/* ---- Memoria del coach: plan vs real, aprendizajes y 52 semanas ---- */
+const sum = (arr, f) => arr.reduce((t,x) => t + (f(x)||0), 0);
+function mondayOf(dateStr){ const d = new Date(dateStr+"T12:00:00"); return iso(addDays(d, -((d.getDay()+6)%7))) }
+function yearWeeks(D){
+  const byWeek = {};
+  (D.allActivities||D.activities).forEach(a => { const k = mondayOf(a.date); (byWeek[k] ||= []).push(a) });
+  const ctlAt = {}; D.wellness.forEach(x => { if(x.ctl!=null) ctlAt[mondayOf(x.date)] = r1(x.ctl) });
+  return Object.keys(byWeek).sort().slice(-52).map(k => {
+    const a = byWeek[k], rpes = a.map(x => x.rpe).filter(Boolean);
+    return { semana:k, load: Math.round(sum(a, x=>x.load)), horas: r1(sum(a, x=>x.time)/3600), sesiones: a.length,
+      bici: a.filter(x => BIKE(x.type)).length, rpe_medio: rpes.length ? r1(rpes.reduce((s,v)=>s+v,0)/rpes.length) : undefined, ctl_fin: ctlAt[k] };
+  });
+}
+function archiveWeek(D){
+  const wk = cacheGet("coach.week"); if(!wk) return;
+  const today = iso(new Date());
+  const dias = wk.r.dias.filter(d => d.fecha < today).map(d => {
+    const acts = (D.allActivities||D.activities).filter(a => a.date===d.fecha), rpes = acts.map(a=>a.rpe).filter(Boolean);
+    return { fecha:d.fecha, plan:d.sesion, plan_tipo:d.tipo, plan_load:d.load||0, plan_min:d.min||0, rpe_esperado:d.rpe_esperado,
+      real: acts.map(a=>a.name).join(" + ") || null, real_load: Math.round(sum(acts, a=>a.load)), real_min: Math.round(sum(acts, a=>a.time)/60),
+      rpe: rpes.length ? Math.max(...rpes) : null, ajustado: !!d.ajustado };
+  });
+  if(!dias.length) return;
+  const hist = (cacheGet("coach.history")||[]).filter(h => h.inicio !== wk.r.dias[0].fecha);
+  hist.push({ inicio: wk.r.dias[0].fecha, fin: wk.r.dias[wk.r.dias.length-1].fecha, carga_objetivo: wk.r.carga_semana_objetivo, dias });
+  hist.sort((p,q) => p.inicio.localeCompare(q.inicio));
+  cacheSet("coach.history", hist.slice(-16));
+}
+function weekScore(h){
+  const planned = h.dias.filter(d => d.plan_load > 0);
+  const done = planned.filter(d => d.real_load >= d.plan_load*0.7);
+  const deltas = h.dias.filter(d => d.rpe && d.rpe_esperado).map(d => d.rpe - d.rpe_esperado);
+  return { plan: sum(h.dias, d=>d.plan_load), real: sum(h.dias, d=>d.real_load),
+    cumpl: planned.length ? Math.round(done.length/planned.length*100) : null,
+    drpe: deltas.length ? deltas.reduce((s,v)=>s+v,0)/deltas.length : null };
+}
+const notes = () => cacheGet("coach.notes") || [];
+const rejected = () => cacheGet("coach.rejected") || [];
+function header(D, ctx){
+  const hist = (cacheGet("coach.history")||[]).slice(-8);
+  return `Hoy es ${iso(new Date())} (${DOW[new Date().getDay()]}).
+Atleta: ${D.name}. FTP: ${D.ftp ?? "sin dato"} W. Umbral FC: ${D.lthr ?? "sin dato"}. FC máx: ${D.maxhr ?? "sin dato"}.
+Contexto que da el atleta: ${ctx || "no informado"}.
+Aprendizajes acumulados sobre este atleta: ${notes().length ? JSON.stringify(notes()) : "todavía ninguno"}.
+Aprendizajes que el atleta rechazó (no repetir): ${rejected().length ? JSON.stringify(rejected()) : "ninguno"}.
+Historial plan vs real de semanas anteriores (rpe_esperado lo fijaste vos al planificar): ${hist.length ? JSON.stringify(hist) : "todavía no hay semanas registradas"}.
+Resumen por semana de los últimos 12 meses: ${JSON.stringify(yearWeeks(D))}
+Detalle reciente (wellness 42 días, actividades 8 semanas con RPE, planificado en el calendario de Intervals 14 días):
+${JSON.stringify(compactData(D, 42))}`;
+}
+async function runWeek(){
+  const D = state.data, {ctx} = aiCfg(), wr = weekRange();
+  const prompt = `${header(D, ctx)}
+
+Planificá la semana del ${wr.start} al ${wr.end} (un registro por día, también los de descanso).
+- Decidí cuánto entrenar (carga semanal) y dónde van los descansos según la forma, la rampa, el bienestar y los RPE recientes.
+- Si en el calendario ya hay gimnasio u otras sesiones planificadas, mantenelas en su día como están y planificá la bici alrededor.
+- "rpe_esperado" es el RPE (1–10) que esperás que reporte en cada sesión; 0 en descanso. Sirve para medir después si calibraste bien.
+- Antes de planificar, revisá el historial plan vs real y actualizá los aprendizajes: conservá los que siguen valiendo, corregí los que los datos contradicen y sumá nuevos solo con evidencia de al menos dos situaciones. Máximo 12, cada uno en una frase con su evidencia entre paréntesis.
+${WORKOUT_SYNTAX}
+Devolvé exactamente este JSON:
+{"aprendizajes":["patrón concreto del atleta (evidencia)"],
+"calibracion":"una frase: qué cambiaste respecto de la semana pasada a partir del historial",
+"carga_semana_objetivo":0,"enfoque":"una frase con el objetivo de la semana","descanso":"qué días descansa y por qué, con datos",
+"explicacion":"3 a 5 frases: de dónde viene, cómo está y qué prioriza esta semana",
+"dias":[${DIA_SHAPE}]}`;
+  return askClaude(prompt);
+}
+async function runDaily(){
+  const D = state.data, {ctx} = aiCfg(), wk = cacheGet("coach.week");
+  const plan = wk ? wk.r.dias.map(({fecha,tipo,sesion,detalle,min,load}) => ({fecha,tipo,sesion,detalle,min,load})) : null;
+  const prompt = `${header(D, ctx)}
+
+Plan de la semana vigente: ${plan ? JSON.stringify(plan) : "no hay plan semanal todavía"}.
+Revisá lo que hizo hasta hoy contra el plan (cumplimiento, carga real y RPE) y decidí:
+1. Si la sesión planificada para hoy es apropiada, hay que ajustarla o conviene descansar.
+2. Si hace falta cambiar días que quedan de la semana. Solo incluí en "ajustes" los días que cambian, desde hoy en adelante y nunca después del ${plan ? plan[plan.length-1].fecha : iso(addDays(new Date(),6))}.
+${WORKOUT_SYNTAX}
+Devolvé exactamente este JSON:
+{"semaforo":"verde|amarillo|rojo","estado":"una frase con el diagnóstico de hoy",
+"sesion_hoy":{"veredicto":"apropiada|ajustar|descansar","motivo":"con datos"},
+"descanso":{"necesita":true,"cuando":"hoy | mañana | fecha","cuanto":"ej.: 1 día libre, 2 días suaves","por_que":"motivo con datos"},
+"ajustes":[${DIA_SHAPE.replace('}', ',"motivo":"por qué cambia"}')}],
+"alertas":["señal concreta con dato"],
+"explicacion":"2 a 4 frases sobre cómo viene la semana"}`;
+  return askClaude(prompt);
+}
+async function runActivity(act){
+  const D = state.data, {ctx} = aiCfg();
+  let detail = null;
+  if(!state.demo && act.id && !String(act.id).startsWith("demo")){
+    try{
+      const {key} = creds();
+      const r = await fetch(`${API}/activity/${encodeURIComponent(act.id)}?intervals=true`, { headers:{ Authorization:"Basic "+btoa("API_KEY:"+key) } });
+      if(r.ok){ const x = await r.json();
+        detail = { descripcion: x.description || undefined, feel: x.feel, rpe: x.icu_rpe, decoupling: r1(x.decoupling), eficiencia: r1(x.icu_efficiency_factor),
+          tramos: (x.icu_intervals||[]).filter(i => i.type==="WORK").slice(0,30).map(i => ({ seg:i.moving_time, w:i.average_watts, fc:i.average_heartrate, cad:i.average_cadence })) };
+      }
+    }catch(_){}
+  }
+  const prompt = `Analizá esta sesión: ¿rindió bien, normal o por debajo? Si rindió mal, explicá por qué.
+Atleta: ${D.name}. FTP: ${D.ftp ?? "sin dato"} W. Contexto: ${ctx || "no informado"}.
+Sesión analizada: ${JSON.stringify({ d:act.date, nombre:act.name, min: act.time?Math.round(act.time/60):undefined, load:act.load, np:act.np, fc:act.hr?Math.round(act.hr):undefined, if:act.ifac, rpe:act.rpe, decoupling:act.decoupling })}
+Detalle de tramos de trabajo: ${detail ? JSON.stringify(detail) : "no disponible"}
+Historial para comparar (wellness 42 días, actividades 8 semanas, planificado):
+${JSON.stringify(compactData(D, 42))}
+
+Devolvé exactamente este JSON:
+{"veredicto":"bien|normal|por debajo","resumen":"una frase",
+"comparacion":"cómo se compara con sesiones similares previas, con números",
+"causas":[{"causa":"factor probable","evidencia":"dato que lo respalda","peso":"alto|medio|bajo"}],
+"que_hacer":["acción concreta para los próximos días"]}
+Si rindió bien, "causas" explica qué lo favoreció.`;
+  return askClaude(prompt);
+}
+
+/* Caché por teléfono de las respuestas del coach */
+const cacheGet = k => { try{ return JSON.parse(store.get(k)||"null") }catch(_){ return null } };
+const cacheSet = (k,v) => store.set(k, JSON.stringify(v));
+
+/* ---------- Gráficos SVG ---------- */
+function lineChart(series, opts){
+  const W=340, H=opts.h||170, L=30, R=8, T=10, B=20;
+  const pts = series[0].values.length; if(pts<2) return "";
+  const all = series.flatMap(s => s.values).filter(v => v!=null);
+  let lo = opts.min ?? Math.min(...all), hi = opts.max ?? Math.max(...all);
+  const pad = (hi-lo)*.08 || 5; lo = opts.min ?? Math.floor((lo-pad)/10)*10; hi = Math.ceil((hi+pad)/10)*10;
+  const x = i => L + i*(W-L-R)/(pts-1), y = v => T + (hi-v)*(H-T-B)/(hi-lo);
+  const step = (hi-lo) > 80 ? 40 : (hi-lo) > 40 ? 20 : 10;
+  let g = "";
+  for(let v=Math.ceil(lo/step)*step; v<=hi; v+=step) g += `<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-4}" y="${y(v)+3}" text-anchor="end">${v}</text>`;
+  if(opts.bands) opts.bands.forEach(b => { const y1=y(Math.min(b.to,hi)), y2=y(Math.max(b.from,lo)); if(y2>y1) g += `<rect x="${L}" width="${W-L-R}" y="${y1}" height="${y2-y1}" fill="var(${b.c})" opacity=".12"/>` });
+  if(opts.zero && lo<0 && hi>0) g += `<line x1="${L}" x2="${W-R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--muted)" stroke-dasharray="3 3"/>`;
+  const labels = opts.labels||[]; const every = Math.ceil(pts/5);
+  labels.forEach((t,i) => { if(i%every===0 && i<pts-every/3) g += `<text x="${x(i)}" y="${H-4}" text-anchor="middle">${t}</text>` });
+  series.forEach(s => {
+    let d=""; s.values.forEach((v,i) => { if(v==null) return; d += (d?"L":"M")+x(i).toFixed(1)+","+y(v).toFixed(1) });
+    if(s.area){ const first=s.values.findIndex(v=>v!=null); g += `<path d="${d}L${x(pts-1)},${y(Math.max(lo,0))}L${x(first)},${y(Math.max(lo,0))}Z" fill="var(${s.c})" opacity=".14"/>` }
+    g += `<path d="${d}" fill="none" stroke="var(${s.c})" stroke-width="2" stroke-linejoin="round"/>`;
+    const lv = s.values[pts-1]; if(lv!=null) g += `<circle cx="${x(pts-1)}" cy="${y(lv)}" r="3.5" fill="var(${s.c})"/>`;
+  });
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.aria)}">${g}</svg>`;
+}
+function barChart(values, labels, aria){
+  const W=340,H=150,L=30,R=8,T=10,B=20; const hi = Math.ceil(Math.max(...values,1)/100)*100;
+  const bw = (W-L-R)/values.length; const y = v => T+(hi-v)*(H-T-B)/hi;
+  let g=""; for(let v=0; v<=hi; v+=hi/4) g += `<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-4}" y="${y(v)+3}" text-anchor="end">${Math.round(v)}</text>`;
+  values.forEach((v,i) => {
+    const last = i===values.length-1;
+    g += `<rect x="${L+i*bw+bw*.18}" width="${bw*.64}" y="${y(v)}" height="${y(0)-y(v)}" rx="3" fill="var(--accent)" opacity="${last?1:.55}"/>`;
+    g += `<text x="${L+i*bw+bw/2}" y="${H-4}" text-anchor="middle">${labels[i]}</text>`;
+  });
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(aria)}">${g}</svg>`;
+}
+const shortDate = s => { const d = new Date(s+"T12:00:00"); return `${d.getDate()} ${MES[d.getMonth()]}` };
+
+/* ---------- Vistas ---------- */
+const TITLES = {hoy:"Hoy", coach:"Coach", analisis:"Análisis", actividades:"Actividades", plan:"Plan", bienestar:"Bienestar", ajustes:"Ajustes"};
+const LIGHT = { verde:["--good","Verde"], amarillo:["--warn","Amarillo"], rojo:["--bad","Rojo"] };
+const VERD = { "bien":["--good","Rindió bien"], "normal":["--ctl","Normal"], "por debajo":["--bad","Por debajo"] };
+const busyBtn = (id, label, busy) => `<button class="btn primary" id="${id}" ${busy?"disabled":""}>${busy?"Analizando… (puede tardar 20–40 s)":label}</button>`;
+const stamp = at => `<p class="stamp">Generado ${new Date(at).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"})} · ${esc(aiCfg().model)}</p>`;
+function noAiKey(){ return `<section class="card"><h2>Coach con IA</h2><p class="note">Para que Claude revise el entrenamiento, cargá una clave de la API de Anthropic en <a href="#" data-go="ajustes">Ajustes</a>.</p></section>` }
+
+/* ---- RPE pendiente ---- */
+const RPE_LABEL = ["","Muy fácil","Fácil","Moderado","Algo duro","Duro","Duro","Muy duro","Muy duro","Casi máximo","Máximo"];
+function pendingRpe(D){
+  const since = iso(addDays(new Date(), -7));
+  return D.activities.filter(a => a.date >= since && (a.rpe==null || a.rpe===0)).slice(0,5);
+}
+function viewRpe(D){
+  const p = pendingRpe(D); if(!p.length) return "";
+  return `<section class="card"><h2>¿Cómo te sentiste? · RPE</h2>
+    <p class="note">1 es muy fácil y 10 es el máximo esfuerzo posible. Se guarda en Intervals y el coach lo usa para ajustar la semana.</p>
+    <div class="list" style="margin-top:8px">${p.map(a => `<div class="rpe-item">
+      <div class="rpe-head">${dateCell(a.date)}<div class="t"><b>${esc(a.name)}</b><span>${[fmtDur(a.time), a.load?"carga "+n0(a.load):""].filter(Boolean).join(" · ")}</span></div></div>
+      <div class="rpe-scale" role="group" aria-label="RPE de ${esc(a.name)}">${[1,2,3,4,5,6,7,8,9,10].map(n => `<button class="rpe-btn" style="--i:${n-1}" data-rpe="${n}" data-act="${esc(a.id)}" title="${RPE_LABEL[n]}">${n}</button>`).join("")}</div>
+      <div class="rpe-ends"><span>Muy fácil</span><span>Máximo</span></div>
+    </div>`).join("")}</div>
+    ${state.rpeMsg ? `<p class="msg ${state.rpeMsg.ok?"ok":"bad"}">${esc(state.rpeMsg.t)}</p>` : ""}</section>`;
+}
+async function saveRpe(id, n){
+  const a = state.data.activities.find(x => String(x.id)===String(id)); if(!a) return;
+  try{
+    if(!state.demo) await api(`/activity/${encodeURIComponent(id)}`, {}, { method:"PUT", body:{ icu_rpe:n } });
+    a.rpe = n; state.rpeMsg = { ok:true, t:`RPE ${n} guardado en ${a.name}.` };
+  }catch(e){ state.rpeMsg = { ok:false, t:e.message } }
+  render();
+}
+
+/* ---- Coach: semana + revisión diaria ---- */
+const VERD_HOY = { apropiada:["--good","Sesión de hoy: apropiada"], ajustar:["--warn","Sesión de hoy: ajustar"], descansar:["--bad","Hoy: descansar"] };
+const BIKE = t => /Ride/.test(t||"");
+function viewCoach(D){
+  const {key} = aiCfg(); if(!key) return demoNote() + viewRpe(D) + noAiKey();
+  const wk = cacheGet("coach.week"), dc = cacheGet("coach.daily");
+  const today = iso(new Date()), isMon = new Date().getDay()===1;
+  const weekStale = !wk || wk.r.dias[wk.r.dias.length-1].fecha < today;
+  const r = dc?.date===today ? dc.r : null;
+  let html = demoNote() + viewRpe(D);
+
+  /* Semana */
+  const w = wk?.r;
+  const pendingSend = w ? w.dias.filter(d => BIKE(d.tipo) && d.workout && d.fecha >= today && (!d.eventId || d.dirty)) : [];
+  html += `<section class="card"><h2>Semana${w ? ` · ${shortDate(w.dias[0].fecha)} al ${shortDate(w.dias[w.dias.length-1].fecha)}` : ""}</h2>
+    ${w ? `<p class="lead" style="margin-top:0">${esc(w.enfoque||"")}</p>
+      <div class="block"><h3>Carga objetivo</h3><p><b style="font:600 26px var(--display)">${n0(w.carga_semana_objetivo)}</b></p></div>
+      ${w.descanso ? `<div class="block"><h3>Descanso</h3><p>${esc(w.descanso)}</p></div>` : ""}
+      ${w.explicacion ? `<div class="block"><h3>Lectura</h3><p>${esc(w.explicacion)}</p></div>` : ""}`
+    : `<p class="note">${isMon ? "Hoy es lunes: planificá de mañana martes al lunes que viene." : "Todavía no hay plan. El día de planificación es el lunes, pero podés armar uno ahora hasta el próximo lunes."}</p>`}
+    <div class="btns">
+      ${busyBtn("runweek", w && !weekStale ? "Replanificar semana" : "Planificar semana", state.busy==="week")}
+      ${pendingSend.length ? `<button class="btn" id="sendweek" ${state.busy==="send"?"disabled":""}>${state.busy==="send" ? "Mandando…" : `Mandar ${pendingSend.length} al Garmin`}</button>` : ""}
+    </div>
+    ${state.aiError==="week" ? `<p class="msg bad">${esc(state.aiErrorMsg)}</p>` : ""}
+    ${state.sendMsg ? `<p class="msg ${state.sendMsg.ok?"ok":"bad"}">${esc(state.sendMsg.t)}</p>` : ""}
+    ${w && weekStale ? `<p class="stamp">Este plan ya terminó. Planificá la semana nueva.</p>` : ""}
+    ${wk ? stamp(wk.at) : ""}</section>`;
+  if(w) html += `<section class="card"><h2>Días</h2><div class="list">${w.dias.map((d,i) => {
+      const past = d.fecha < today, isT = d.fecha===today;
+      const chips = [
+        isT ? `<span class="chip" style="color:var(--accent)">Hoy</span>` : "",
+        d.ajustado ? `<span class="chip" style="color:var(--warn)">Ajustado</span>` : "",
+        d.eventId && !d.dirty ? `<span class="chip" style="color:var(--good)">En Garmin</span>` : "",
+        d.eventId && d.dirty ? `<span class="chip" style="color:var(--warn)">Cambio sin mandar</span>` : ""
+      ].join("");
+      return `<div class="row" style="${past?"opacity:.55":""}">${dateCell(d.fecha)}<div class="t"><b>${esc(d.sesion)}</b><span style="white-space:normal">${chips}${esc([d.min?fmtDur(d.min*60):"", d.detalle].filter(Boolean).join(" · "))}</span>
+        ${d.motivo ? `<span style="white-space:normal;display:block;color:var(--warn)">${esc(d.motivo)}</span>` : ""}
+        ${d.workout ? `<button class="mini" data-wo="${i}">${state.openWo===i ? "Ocultar estructura" : "Ver estructura"}</button>${state.openWo===i ? `<pre class="wo">${esc(d.workout)}</pre>` : ""}` : ""}</div>
+        <div class="load">${d.load?n0(d.load):"—"}<small>CARGA</small></div></div>` }).join("")}</div></section>`;
+
+  /* Memoria: aprendizajes y plan vs real */
+  const ns = notes(), hist = (cacheGet("coach.history")||[]).slice(-6).reverse();
+  html += `<section class="card"><h2>Lo que aprendió del atleta</h2>
+    ${ns.length ? `<ul class="bul notes">${ns.map((n,i) => `<li><span>${esc(n)}</span><button class="x" data-reject="${i}" aria-label="Descartar este aprendizaje">✕</button></li>`).join("")}</ul>
+      <p class="stamp">Se actualiza cada vez que planificás la semana. Descartá lo que no sea cierto y no lo vuelve a proponer.</p>`
+    : `<p class="note">Todavía no hay aprendizajes. Aparecen desde la primera planificación y mejoran a medida que se acumulan semanas con plan, entrenamiento real y RPE.</p>`}
+    ${w?.calibracion ? `<div class="block"><h3>Ajuste por historial</h3><p>${esc(w.calibracion)}</p></div>` : ""}</section>`;
+  if(hist.length) html += `<section class="card"><h2>Plan contra real</h2><div class="list">${hist.map(h => { const s = weekScore(h);
+      const dc = s.drpe==null ? "" : `RPE ${s.drpe>0?"+":""}${s.drpe.toFixed(1).replace(".",",")} vs esperado`;
+      return `<div class="row"><div class="date">sem<b>${new Date(h.inicio+"T12:00:00").getDate()}</b>${MES[new Date(h.inicio+"T12:00:00").getMonth()]}</div>
+        <div class="t"><b>Carga ${n0(s.real)} de ${n0(s.plan)}</b><span>${[s.cumpl!=null?`cumplió ${s.cumpl}% de las sesiones`:"", dc].filter(Boolean).join(" · ")}</span></div>
+        <div class="load" style="color:var(${s.cumpl==null?"--muted":s.cumpl>=80?"--good":s.cumpl>=60?"--warn":"--bad"})">${s.cumpl==null?"—":s.cumpl+"%"}<small>CUMPL.</small></div></div>` }).join("")}</div></section>`;
+
+  /* Revisión del día */
+  html += `<section class="card"><h2>Revisión del día</h2>
+    <p class="note">Compara lo que hiciste y tus RPE contra el plan, dice si la sesión de hoy es apropiada y ajusta los días que quedan.</p>
+    <div class="btns">${busyBtn("rundaily", r ? "Volver a revisar" : "Revisar hoy", state.busy==="daily")}</div>
+    ${state.aiError==="daily" ? `<p class="msg bad">${esc(state.aiErrorMsg)}</p>` : ""}
+    ${pendingRpe(D).length ? `<p class="stamp">Faltan ${pendingRpe(D).length} RPE: cargalos antes para que la revisión sea mejor.</p>` : ""}</section>`;
+  if(r){
+    const [lc, ll] = LIGHT[r.semaforo] || ["--grey", r.semaforo||"—"];
+    const [vc, vl] = VERD_HOY[r.sesion_hoy?.veredicto] || [];
+    html += `<section class="card"><span class="light" style="color:var(${lc})">${esc(ll)}</span>
+      <p class="lead">${esc(r.estado)}</p>
+      ${vl ? `<div class="block"><h3 style="color:var(${vc})">${esc(vl)}</h3><p>${esc(r.sesion_hoy.motivo)}</p></div>` : ""}
+      ${r.descanso ? `<div class="block"><h3>Descanso</h3><p><b>${r.descanso.necesita ? esc([r.descanso.cuando, r.descanso.cuanto].filter(Boolean).join(" · ")) : "No hace falta ahora"}</b></p><p class="note">${esc(r.descanso.por_que)}</p></div>` : ""}
+      ${(r.ajustes||[]).length ? `<div class="block"><h3>Cambios aplicados a la semana</h3><ul class="bul">${r.ajustes.map(a=>`<li><b>${shortDate(a.fecha)} · ${esc(a.sesion)}</b><span class="ev">${esc(a.motivo)}</span></li>`).join("")}</ul></div>` : ""}
+      ${r.explicacion ? `<div class="block"><h3>Lectura</h3><p>${esc(r.explicacion)}</p></div>` : ""}
+      ${(r.alertas||[]).length ? `<div class="block"><h3>Alertas</h3><ul class="bul">${r.alertas.map(a=>`<li>${esc(a)}</li>`).join("")}</ul></div>` : ""}
+      ${stamp(dc.at)}</section>`;
+  }
+  return html;
+}
+async function doWeek(){
+  state.busy="week"; state.aiError=null; state.sendMsg=null; render();
+  try{
+    archiveWeek(state.data);
+    const r = await runWeek();
+    if(Array.isArray(r.aprendizajes)) cacheSet("coach.notes", r.aprendizajes.filter(Boolean).slice(0,12));
+    const old = cacheGet("coach.week");
+    (r.dias||[]).forEach(d => { const prev = old?.r.dias.find(x => x.fecha===d.fecha); if(prev?.eventId){ d.eventId = prev.eventId; d.dirty = true } });
+    cacheSet("coach.week", {at:Date.now(), r});
+  }catch(e){ state.aiError="week"; state.aiErrorMsg=e.message }
+  state.busy=null; render();
+}
+async function sendWeek(){
+  const wk = cacheGet("coach.week"); if(!wk) return;
+  if(state.demo){ state.sendMsg = {ok:false, t:"En modo ejemplo no se manda nada. Cargá la clave de Intervals en Ajustes."}; render(); return }
+  state.busy="send"; state.sendMsg=null; render();
+  const today = iso(new Date()); let ok=0, fail=[];
+  for(const d of wk.r.dias){
+    if(!(BIKE(d.tipo) && d.workout && d.fecha >= today && (!d.eventId || d.dirty))) continue;
+    const body = { category:"WORKOUT", start_date_local:`${d.fecha}T00:00:00`, type:d.tipo, name:d.sesion, description:d.workout };
+    try{
+      const ev = d.eventId ? await api(`/events/${d.eventId}`, {}, {method:"PUT", body}) : await api("/events", {}, {method:"POST", body});
+      d.eventId = ev?.id ?? d.eventId; d.dirty = false; ok++;
+    }catch(e){ fail.push(`${shortDate(d.fecha)}: ${e.message}`) }
+  }
+  cacheSet("coach.week", wk);
+  state.sendMsg = fail.length ? {ok:false, t:`Se mandaron ${ok}. Fallaron: ${fail.join(" · ")}`} : {ok:true, t:`Listo: ${ok} entrenamientos en el calendario de Intervals. Se sincronizan con el Garmin en la próxima conexión.`};
+  state.busy=null; await refresh();
+}
+function viewAnalisis(D){
+  const act = D.activities.find(a => String(a.id)===String(state.actId));
+  if(!act) return `<section class="card"><p class="note">No encuentro esa actividad. Volvé a <a href="#" data-go="actividades">Actividades</a>.</p></section>`;
+  const {key} = aiCfg();
+  const c = cacheGet("coach.act."+act.id), r = c?.r, busy = state.busy==="act";
+  let html = `<section class="card"><h2>${shortDate(act.date)} · ${esc(act.name)}</h2>
+    <p class="note">${[fmtDur(act.time), fmtKm(act.dist), act.np?act.np+" W NP":"", act.hr?Math.round(act.hr)+" ppm":"", act.load?"carga "+n0(act.load):""].filter(Boolean).join(" · ")}</p>
+    ${key ? `<div class="btns">${busyBtn("runact", r ? "Volver a analizar" : "Analizar la sesión", busy)}<button class="btn" data-go="actividades">Volver</button></div>` : ""}
+    ${state.aiError==="act" ? `<p class="msg bad">${esc(state.aiErrorMsg)}</p>` : ""}</section>`;
+  if(!key) return html + noAiKey();
+  if(!r) return html;
+  const [vc, vl] = VERD[r.veredicto] || ["--grey", r.veredicto||"—"];
+  html += `<section class="card"><span class="light" style="color:var(${vc})">${esc(vl)}</span>
+    <p class="lead">${esc(r.resumen)}</p>
+    ${r.comparacion ? `<div class="block"><h3>Contra sesiones parecidas</h3><p>${esc(r.comparacion)}</p></div>` : ""}
+    ${(r.causas||[]).length ? `<div class="block"><h3>${r.veredicto==="por debajo" ? "Por qué rindió mal" : "Qué lo explica"}</h3><ul class="bul">${r.causas.map(x=>`<li><b>${esc(x.causa)}</b>${x.peso?` <span class="chip" style="color:var(${x.peso==="alto"?"--bad":x.peso==="medio"?"--warn":"--grey"})">${esc(x.peso)}</span>`:""}<span class="ev">${esc(x.evidencia)}</span></li>`).join("")}</ul></div>` : ""}
+    ${(r.que_hacer||[]).length ? `<div class="block"><h3>Qué hacer</h3><ul class="bul">${r.que_hacer.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+    ${stamp(c.at)}</section>`;
+  return html;
+}
+async function doDaily(){
+  state.busy="daily"; state.aiError=null; render();
+  try{
+    const r = await runDaily(); cacheSet("coach.daily", {date:iso(new Date()), at:Date.now(), r});
+    const wk = cacheGet("coach.week");
+    if(wk && (r.ajustes||[]).length){
+      r.ajustes.forEach(a => { const i = wk.r.dias.findIndex(d => d.fecha===a.fecha); if(i<0) return;
+        const prev = wk.r.dias[i];
+        wk.r.dias[i] = { ...a, ajustado:true, eventId: prev.eventId, dirty: !!prev.eventId };
+      });
+      cacheSet("coach.week", wk);
+    }
+  }
+  catch(e){ state.aiError="daily"; state.aiErrorMsg=e.message }
+  state.busy=null; render();
+}
+async function doActivity(){
+  const act = state.data.activities.find(a => String(a.id)===String(state.actId)); if(!act) return;
+  state.busy="act"; state.aiError=null; render();
+  try{ const r = await runActivity(act); cacheSet("coach.act."+act.id, {at:Date.now(), r}) }
+  catch(e){ state.aiError="act"; state.aiErrorMsg=e.message }
+  state.busy=null; render();
+}
+function demoNote(){ return state.demo ? `<p class="note">Datos de ejemplo. Cargá tu clave en <a href="#" data-go="ajustes">Ajustes</a> para ver los tuyos.</p>` : "" }
+
+function viewHoy(D){
+  const w = D.wellness.filter(x => x.ctl!=null); const last = w[w.length-1];
+  if(!last) return `<section class="card"><p class="note">Todavía no hay datos de fitness en Intervals.</p></section>`;
+  const tsb = last.ctl-last.atl, pct = last.ctl ? tsb/last.ctl*100 : 0, z = zoneOf(pct);
+  const pinPos = Math.min(100, Math.max(0, (pct+50)/90*100));
+  const last90 = w.slice(-90);
+  const wk = weekly(D.activities, 8);
+  const ramp = w.length>7 ? last.ctl - w[w.length-8].ctl : null;
+  const today = iso(new Date());
+  const cc = cacheGet("coach.daily"), cr = cc && cc.date===today ? cc.r : null;
+  const ses = cacheGet("coach.week")?.r.dias.find(d => d.fecha===today);
+  const [lc, ll] = cr ? (LIGHT[cr.semaforo] || ["--grey","—"]) : [];
+  const sesLine = ses ? `<p style="margin:10px 0 0"><b>Plan de hoy:</b> ${esc(ses.sesion)}${ses.min?" · "+fmtDur(ses.min*60):""}</p>` : "";
+  const coachCard = !aiCfg().key ? "" : cr
+    ? `<section class="card"><h2>Coach · hoy</h2><span class="light" style="color:var(${lc})">${esc(ll)}</span><p class="lead">${esc(cr.estado)}</p>${sesLine}${cr.sesion_hoy ? `<p class="note" style="margin-top:6px">${esc((VERD_HOY[cr.sesion_hoy.veredicto]||[])[1]||"")}: ${esc(cr.sesion_hoy.motivo)}</p>` : ""}<button class="mini" data-go="coach">Ver semana</button></section>`
+    : `<section class="card"><h2>Coach · hoy</h2><p class="note">${new Date().getDay()===1 ? "Es lunes: toca planificar la semana." : "Todavía no hay revisión de hoy."}</p>${sesLine}<button class="mini" data-go="coach">${new Date().getDay()===1 ? "Planificar semana" : "Revisar hoy"}</button></section>`;
+  return `
+  ${demoNote()}
+  ${viewRpe(D)}
+  ${coachCard}
+  <section class="card">
+    <h2>Forma de hoy · ${esc(D.name)}</h2>
+    <div class="form-hero">
+      <div><div class="big" style="color:var(${z.c})">${tsb>0?"+":""}${n0(tsb)}</div><p class="note">TSB · ${pct>0?"+":""}${n0(pct)}% de la fitness</p></div>
+      <span class="zone" style="color:var(${z.c});border:1px solid var(${z.c})">${z.name}</span>
+    </div>
+    <div class="zonebar" aria-hidden="true">
+      <i style="flex:20;background:var(--bad)"></i><i style="flex:20;background:var(--good)"></i><i style="flex:15;background:var(--grey)"></i><i style="flex:15;background:var(--ctl)"></i><i style="flex:20;background:var(--warn)"></i>
+      <span class="pin" style="left:${pinPos}%"></span>
+    </div>
+    <div class="zonelabels"><span>−50%</span><span>−30</span><span>−10</span><span>+5</span><span>+20</span><span>+40%</span></div>
+    <div class="trio">
+      <div style="--c:var(--ctl)"><small>Fitness CTL</small><b>${n0(last.ctl)}</b></div>
+      <div style="--c:var(--atl)"><small>Fatiga ATL</small><b>${n0(last.atl)}</b></div>
+      <div style="--c:var(--accent)"><small>Rampa 7 d</small><b>${ramp==null?"—":(ramp>0?"+":"")+ramp.toFixed(1).replace(".",",")}</b></div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>Fitness y fatiga · 90 días</h2>
+    ${lineChart([{values:last90.map(x=>x.ctl),c:"--ctl",area:true},{values:last90.map(x=>x.atl),c:"--atl"}],{labels:last90.map(x=>shortDate(x.date)),aria:"Fitness y fatiga de los últimos 90 días"})}
+    <div class="legend"><span style="--c:var(--ctl)"><i></i>Fitness (CTL, 42 d)</span><span style="--c:var(--atl)"><i></i>Fatiga (ATL, 7 d)</span></div>
+  </section>
+  <section class="card">
+    <h2>Forma · 90 días</h2>
+    ${lineChart([{values:last90.map(x=>x.ctl-x.atl),c:"--tsb"}],{h:140,zero:true,labels:last90.map(x=>shortDate(x.date)),aria:"Forma de los últimos 90 días",
+      bands:[{from:-999,to:-30,c:"--bad"},{from:-30,to:-10,c:"--good"}].map(b=>({...b,from:b.from*last.ctl/100,to:b.to*last.ctl/100}))})}
+    <p class="note" style="margin-top:8px">Bandas calculadas con la fitness actual: verde es carga productiva, rojo es riesgo de sobrecarga.</p>
+  </section>
+  <section class="card">
+    <h2>Carga semanal · 8 semanas</h2>
+    ${barChart(wk.map(x=>x.load), wk.map(x=>x.label), "Carga de entrenamiento por semana")}
+    <p class="note" style="margin-top:8px">Semana actual: ${n0(wk[wk.length-1].load)} de carga en ${fmtDur(wk[wk.length-1].time)}.</p>
+  </section>`;
+}
+function weekly(acts, n){
+  const now = new Date(); const monday = addDays(now, -((now.getDay()+6)%7)); monday.setHours(0,0,0,0);
+  const out = [];
+  for(let i=n-1;i>=0;i--){
+    const s = addDays(monday,-7*i), e = addDays(s,7);
+    const inW = acts.filter(a => { const d=new Date(a.date+"T12:00:00"); return d>=s && d<e });
+    out.push({ label: `${s.getDate()}/${s.getMonth()+1}`, load: inW.reduce((t,a)=>t+(a.load||0),0), time: inW.reduce((t,a)=>t+(a.time||0),0) });
+  }
+  return out;
+}
+function dateCell(s){ const d=new Date(s+"T12:00:00"); return `<div class="date">${DOW[d.getDay()]}<b>${d.getDate()}</b>${MES[d.getMonth()]}</div>` }
+function viewActividades(D){
+  if(!D.activities.length) return `${demoNote()}<section class="card"><p class="note">No hay actividades en las últimas 8 semanas.</p></section>`;
+  return `${demoNote()}<section class="card"><h2>Últimas 8 semanas · ${D.activities.length} actividades</h2><div class="list">${
+    D.activities.map(a => `<div class="row">${dateCell(a.date)}<div class="t"><b>${esc(a.name)}</b><span>${[fmtDur(a.time), fmtKm(a.dist), a.np?a.np+" W NP":"", a.hr?Math.round(a.hr)+" ppm":"", a.ifac?"IF "+(a.ifac/100).toFixed(2).replace(".",","):""].filter(Boolean).join(" · ")}</span></div><div class="act"><div class="load">${n0(a.load)}<small>CARGA</small></div><button class="mini" data-analyze="${esc(a.id)}">${cacheGet("coach.act."+a.id) ? "Ver análisis" : "Analizar"}</button></div></div>`).join("")
+  }</div></section>`;
+}
+const CAT = { WORKOUT:["Entreno","--accent"], RACE_A:["Carrera A","--bad"], RACE_B:["Carrera B","--warn"], RACE_C:["Carrera C","--grey"] };
+function viewPlan(D){
+  if(!D.events.length) return `${demoNote()}<section class="card"><h2>Próximos 14 días</h2><p class="note">No hay entrenamientos ni carreras cargados en el calendario de Intervals.</p></section>`;
+  const tot = D.events.reduce((t,e)=>t+(e.load||0),0);
+  return `${demoNote()}<section class="card"><h2>Próximos 14 días · carga planificada ${n0(tot)}</h2><div class="list">${
+    D.events.map(e => { const [lab,c] = CAT[e.cat] || [e.cat||"Evento","--muted"];
+      return `<div class="row">${dateCell(e.date)}<div class="t"><b>${esc(e.name)}</b><span><span class="chip" style="color:var(${c})">${esc(lab)}</span>${fmtDur(e.time)}</span></div><div class="load">${n0(e.load)}<small>CARGA</small></div></div>` }).join("")
+  }</div></section>`;
+}
+function avg(arr){ const v = arr.filter(x=>x!=null&&!isNaN(x)); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null }
+function viewBienestar(D){
+  const w = D.wellness.slice(-30), last7 = w.slice(-7), prev = w.slice(-28,-7);
+  const card = (lab,key,unit,dec=0,fmt) => { const a=avg(last7.map(x=>x[key])), b=avg(prev.map(x=>x[key]));
+    const f = v => v==null ? "—" : fmt ? fmt(v) : v.toFixed(dec).replace(".",",");
+    return `<div class="stat"><small>${lab}</small><b>${f(a)}</b> <em>${unit}</em><br><em>3 sem. previas: ${f(b)}</em></div>` };
+  const has = k => w.some(x => x[k]!=null);
+  if(!w.length) return `${demoNote()}<section class="card"><p class="note">No hay registros de bienestar en Intervals.</p></section>`;
+  return `${demoNote()}
+  <section class="card"><h2>Promedio últimos 7 días</h2><div class="stats">
+    ${card("HRV","hrv","ms")}${card("FC reposo","rhr","ppm")}${card("Sueño","sleep","",0,v=>fmtDur(v))}${card("Peso","weight","kg",1)}
+  </div></section>
+  ${has("hrv") ? `<section class="card"><h2>HRV · 30 días</h2>${lineChart([{values:w.map(x=>x.hrv),c:"--good"}],{h:130,labels:w.map(x=>shortDate(x.date)),aria:"HRV de los últimos 30 días"})}</section>` : ""}
+  ${has("rhr") ? `<section class="card"><h2>FC en reposo · 30 días</h2>${lineChart([{values:w.map(x=>x.rhr),c:"--atl"}],{h:130,labels:w.map(x=>shortDate(x.date)),aria:"Frecuencia cardíaca en reposo de los últimos 30 días"})}</section>` : ""}`;
+}
+function viewAjustes(){
+  const {key, athlete} = creds();
+  return `<section class="card">
+    <h2>Conexión con Intervals.icu</h2>
+    <form id="cfg" autocomplete="off">
+      <label for="athlete">ID de atleta</label>
+      <input type="text" id="athlete" inputmode="text" placeholder="i30352, o 0 para el dueño de la clave" value="${esc(store.get("athlete")||"")}">
+      <label for="key">Clave de API</label>
+      <input type="password" id="key" placeholder="${key ? "Guardada en este teléfono" : "Pegá la clave de Intervals"}">
+      <div class="btns">
+        <button class="btn primary" type="submit">Guardar y conectar</button>
+        ${key ? `<button class="btn danger" type="button" id="forget">Borrar clave de este teléfono</button>` : ""}
+      </div>
+      <p class="msg" id="cfgmsg" role="status"></p>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Coach con IA</h2>
+    <form id="aicfg" autocomplete="off">
+      <label for="aikey">Clave de la API de Anthropic</label>
+      <input type="password" id="aikey" placeholder="${aiCfg().key ? "Guardada en este teléfono" : "sk-ant-…"}">
+      <label for="aimodel">Modelo</label>
+      <select id="aimodel">${MODELS.map(([v,l]) => `<option value="${v}" ${aiCfg().model===v?"selected":""}>${esc(l)}</option>`).join("")}</select>
+      <label for="aictx">Contexto del atleta</label>
+      <textarea id="aictx" placeholder="Objetivo: Gran Fondo de 160 km el 15/11. Entreno 8–10 h por semana; martes y jueves en rodillo, sábado salida larga. Sin lesiones.">${esc(aiCfg().ctx)}</textarea>
+      <div class="btns">
+        <button class="btn primary" type="submit">Guardar coach</button>
+        ${aiCfg().key ? `<button class="btn danger" type="button" id="forgetai">Borrar clave de Claude</button>` : ""}
+      </div>
+      <p class="msg" id="aimsg" role="status"></p>
+    </form>
+    <p class="note" style="margin-top:12px">Cada revisión manda a Anthropic los datos de entrenamiento y bienestar de las últimas semanas, sin la clave de Intervals. La clave se crea en console.anthropic.com → API Keys y se paga por uso, aparte de la suscripción de Claude.</p>
+  </section>
+  <section class="card">
+    <h2>Memoria del coach</h2>
+    <p class="note">Los aprendizajes, el historial plan contra real y el plan vigente viven en este teléfono. Copiá el respaldo cada tanto y guardalo en una nota; para pasarlo a otro teléfono, pegalo acá y restaurá.</p>
+    <div class="btns"><button class="btn" type="button" id="bkcopy">Copiar respaldo</button></div>
+    <label for="bktext">Pegar respaldo</label>
+    <textarea id="bktext" placeholder='{"coach.notes": …}'></textarea>
+    <div class="btns"><button class="btn" type="button" id="bkrestore">Restaurar</button></div>
+    <p class="msg" id="bkmsg" role="status"></p>
+  </section>
+  <section class="card">
+    <h2>Dónde está la clave de Intervals</h2>
+    <ol class="howto">
+      <li>Entrá a intervals.icu → Settings.</li>
+      <li>Al final de la página, en Developer Settings, copiá el Athlete ID y la API Key.</li>
+      <li>Si la clave se compartió en algún chat o mensaje, generá una nueva ahí mismo antes de pegarla acá.</li>
+    </ol>
+    <p class="note" style="margin-top:10px">La clave queda guardada solo en este navegador del teléfono y viaja únicamente a intervals.icu. No forma parte del código de la app.</p>
+  </section>`;
+}
+
+/* ---------- Render y navegación ---------- */
+function render(){
+  const v = state.view;
+  document.querySelectorAll(".nav").forEach(b => b.dataset.view===v ? b.setAttribute("aria-current","page") : b.removeAttribute("aria-current"));
+  $("#title").textContent = TITLES[v];
+  const mode = $("#mode");
+  mode.className = "badge " + (state.demo ? "demo" : state.data ? "live" : "");
+  mode.textContent = state.demo ? "Ejemplo" : state.data ? "En vivo" : "—";
+  $("#sidefoot").textContent = state.demo ? "Sin clave: datos de ejemplo" : state.data ? `Conectado · ${state.data.name}` : "Sin conectar";
+  let html = "";
+  if(state.error && v!=="ajustes") html += `<section class="card err"><p>${esc(state.error)}</p></section>`;
+  if(v==="ajustes") html += viewAjustes();
+  else if(state.data) html += ({hoy:viewHoy, coach:viewCoach, analisis:viewAnalisis, actividades:viewActividades, plan:viewPlan, bienestar:viewBienestar})[v](state.data);
+  else if(!state.error) html += `<section class="card"><p class="note">Cargando datos de Intervals…</p></section>`;
+  $("#main").innerHTML = html;
+  bindAjustes();
+  const rd = $("#rundaily"); if(rd) rd.addEventListener("click", doDaily);
+  const rw = $("#runweek"); if(rw) rw.addEventListener("click", doWeek);
+  const sw = $("#sendweek"); if(sw) sw.addEventListener("click", sendWeek);
+  const ra = $("#runact"); if(ra) ra.addEventListener("click", doActivity);
+  document.querySelectorAll(".nav").forEach(b => { if(v==="analisis" && b.dataset.view==="actividades") b.setAttribute("aria-current","page") });
+}
+function go(v){ state.view=v; store.set("view",v); closeSide(); render(); window.scrollTo(0,0) }
+async function refresh(){
+  const {key} = creds();
+  $("#main").classList.add("loading");
+  if(!key){ state.data = demoData(); state.demo = true; state.error = null; }
+  else{
+    try{ state.data = await loadLive(); state.demo = false; state.error = null; store.set("cache", JSON.stringify({at:Date.now(), data:state.data})); }
+    catch(e){ state.error = e.message; state.demo=false;
+      try{ const c = JSON.parse(store.get("cache")||"null"); if(c){ state.data = c.data; state.error += ` Se muestran los últimos datos guardados (${new Date(c.at).toLocaleString("es-AR")}).` } }catch(_){} }
+  }
+  $("#main").classList.remove("loading");
+  render();
+}
+function bindAjustes(){
+  const f = $("#cfg"); if(!f) return;
+  f.addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const a = $("#athlete").value.trim(), k = $("#key").value.trim(), msg = $("#cfgmsg");
+    if(a) store.set("athlete", a); else store.del("athlete");
+    if(k) store.set("key", k);
+    if(!creds().key){ msg.className="msg bad"; msg.textContent="Falta la clave de API."; return }
+    msg.className="msg"; msg.textContent="Probando la conexión…";
+    try{ const p = await api("", {}); msg.className="msg ok"; msg.textContent=`Conectado como ${p.name || p.id}. Cargando datos…`; await refresh(); go("hoy") }
+    catch(e){ msg.className="msg bad"; msg.textContent=e.message }
+  });
+  const af = $("#aicfg");
+  af.addEventListener("submit", ev => {
+    ev.preventDefault();
+    const k = $("#aikey").value.trim(), msg = $("#aimsg");
+    if(k) store.set("aikey", k);
+    store.set("aimodel", $("#aimodel").value);
+    store.set("aictx", $("#aictx").value.trim());
+    msg.className = aiCfg().key ? "msg ok" : "msg bad";
+    msg.textContent = aiCfg().key ? "Coach guardado. Ya podés pedir la revisión en Coach." : "Guardé el contexto, pero falta la clave de Claude.";
+  });
+  const BK = ["coach.notes","coach.rejected","coach.history","coach.week","aictx"];
+  $("#bkcopy").addEventListener("click", () => {
+    const data = {}; BK.forEach(k => { const v = store.get(k); if(v!=null) data[k] = v });
+    const txt = JSON.stringify(data), msg = $("#bkmsg");
+    navigator.clipboard.writeText(txt).then(() => { msg.className="msg ok"; msg.textContent="Respaldo copiado. Pegalo en una nota para guardarlo." })
+      .catch(() => { const t = $("#bktext"); t.value = txt; t.select(); msg.className="msg"; msg.textContent="El respaldo quedó en el cuadro, seleccionado: copialo a mano." });
+  });
+  $("#bkrestore").addEventListener("click", () => {
+    const msg = $("#bkmsg");
+    try{ const data = JSON.parse($("#bktext").value); let n=0;
+      BK.forEach(k => { if(typeof data[k]==="string"){ store.set(k, data[k]); n++ } });
+      if(!n) throw 0; msg.className="msg ok"; msg.textContent=`Restaurado (${n} partes). Ya está en Coach.`;
+    }catch(_){ msg.className="msg bad"; msg.textContent="Ese texto no es un respaldo de Pedal. Copialo completo, desde la primera llave hasta la última." }
+  });
+  const fa = $("#forgetai"); if(fa) fa.addEventListener("click", () => { store.del("aikey"); render() });
+  const fg = $("#forget"); if(fg) fg.addEventListener("click", () => { store.del("key"); store.del("cache"); state.data=null; refresh().then(()=>go("ajustes")) });
+}
+
+/* Sidebar colapsable */
+const side = $("#side"), scrim = $("#scrim"), wide = () => matchMedia("(min-width:900px)").matches;
+function closeSide(){ if(!wide()){ side.classList.remove("open"); scrim.hidden = true } }
+$("#menu").addEventListener("click", () => {
+  if(wide()){ document.body.classList.toggle("collapsed"); store.set("collapsed", document.body.classList.contains("collapsed")?"1":"0") }
+  else { const o = !side.classList.contains("open"); side.classList.toggle("open", o); scrim.hidden = !o }
+});
+scrim.addEventListener("click", closeSide);
+document.querySelectorAll(".nav").forEach(b => b.addEventListener("click", () => go(b.dataset.view)));
+document.addEventListener("click", e => {
+  const g = e.target.closest("[data-go]"); if(g){ e.preventDefault(); go(g.dataset.go); return }
+  const rj = e.target.closest("[data-reject]");
+  if(rj){ const ns = notes(), i = +rj.dataset.reject; cacheSet("coach.rejected", [...rejected(), ns[i]].slice(-20)); ns.splice(i,1); cacheSet("coach.notes", ns); render(); return }
+  const rp = e.target.closest("[data-rpe]"); if(rp){ saveRpe(rp.dataset.act, +rp.dataset.rpe); return }
+  const wo = e.target.closest("[data-wo]"); if(wo){ const i=+wo.dataset.wo; state.openWo = state.openWo===i ? null : i; render(); return }
+  const an = e.target.closest("[data-analyze]"); if(an){ state.actId = an.dataset.analyze; state.aiError=null; go("analisis") }
+});
+$("#refresh").addEventListener("click", refresh);
+if(store.get("collapsed")==="1") document.body.classList.add("collapsed");
+
+render(); refresh();
+})();
+</script>
+</body>
+</html>
