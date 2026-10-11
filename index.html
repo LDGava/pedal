@@ -152,6 +152,22 @@ textarea{min-height:110px;resize:vertical}
   color:color-mix(in srgb,var(--good) calc(100% - var(--i,0)*10%),var(--bad))}
 .rpe-btn:hover,.rpe-btn:focus-visible{border-color:currentColor}
 .rpe-ends{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--muted);margin-top:4px}
+.avail{display:grid;grid-template-columns:44px 1fr;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.avail:first-child{border-top:0}
+.avail select{padding:10px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.two>div{min-width:0}
+input[type=date]{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font:15px var(--mono);color:inherit;min-height:46px}
+.search{display:flex;gap:8px}
+.search input{flex:1;min-width:0}
+.picks{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.pick{text-align:left;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);cursor:pointer}
+.pick:hover{border-color:var(--accent)}
+.wx{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.wxd{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;border-radius:10px;background:var(--bg);font:12px var(--mono);color:var(--muted);min-width:0}
+.wxd small{font:600 11px var(--mono);text-transform:uppercase;letter-spacing:.04em}
+.wxd b{font:600 20px/1 var(--display);color:var(--fg)}
+.wxd.bad{background:color-mix(in srgb,var(--warn) 16%,var(--bg));color:var(--fg)}
 .notes{padding-left:0;list-style:none}
 .notes li{display:flex;gap:10px;align-items:flex-start}
 .notes li span{flex:1;min-width:0}
@@ -169,6 +185,7 @@ pre.wo{margin:8px 0 0;padding:10px;border-radius:8px;background:var(--bg);border
   <button class="nav" data-view="actividades"><svg viewBox="0 0 24 24"><circle cx="6" cy="16" r="4"/><circle cx="18" cy="16" r="4"/><path d="M6 16l4-8h5l3 8M10 8l2 8h-6"/></svg>Actividades</button>
   <button class="nav" data-view="coach"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>Coach</button>
   <button class="nav" data-view="modelo"><svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M4 16c3-9 6-9 8-4s5 5 8-6"/><circle cx="12" cy="12" r="1.2"/><circle cx="7" cy="9.5" r="1.2"/><circle cx="17" cy="9" r="1.2"/></svg>Modelo</button>
+  <button class="nav" data-view="carreras"><svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h12l-2 4 2 4H5"/></svg>Carreras</button>
   <button class="nav" data-view="plan"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Plan</button>
   <button class="nav" data-view="bienestar"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></svg>Bienestar</button>
   <button class="nav" data-view="ajustes"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Ajustes</button>
@@ -242,7 +259,7 @@ async function loadLive(){
     api("", {}),
     api("/wellness", { oldest: iso(addDays(today,-365)), newest: iso(today) }),
     api("/activities", { oldest: iso(addDays(today,-365)), newest: iso(today) }),
-    api("/events", { oldest: iso(today), newest: iso(addDays(today,14)) }).catch(() => [])
+    api("/events", { oldest: iso(addDays(today,-365)), newest: iso(addDays(today,180)) }).catch(() => [])
   ]);
   return normalize(profile, wellness, activities, events);
 }
@@ -257,14 +274,17 @@ function normalize(profile, wellness, activities, events){
     time: x.moving_time, dist: x.distance, load: x.icu_training_load,
     np: x.icu_weighted_avg_watts, hr: x.average_heartrate, ifac: x.icu_intensity, elev: x.total_elevation_gain
   })).sort((p,q) => q.date.localeCompare(p.date));
-  const e = (events||[]).map(x => ({
-    date: (x.start_date_local||"").slice(0,10), name: x.name, cat: x.category, type: x.type,
+  const allEv = (events||[]).map(x => ({
+    id: x.id, date: (x.start_date_local||"").slice(0,10), name: x.name, cat: x.category, type: x.type,
     time: x.moving_time, load: x.icu_training_load
   })).filter(x => x.cat !== "NOTE").sort((p,q) => p.date.localeCompare(q.date));
+  const t0 = iso(new Date()), t14 = iso(addDays(new Date(), 14));
+  const e = allEv.filter(x => x.date >= t0 && x.date <= t14);
+  const raceEvents = allEv.filter(x => /^RACE/.test(x.cat||""));
   const ride = (profile?.sportSettings||[]).find(s => (s.types||[]).includes("Ride")) || {};
   const since56 = iso(addDays(new Date(), -56));
   return { name: profile?.name || profile?.firstname || "Atleta", id: profile?.id, ftp: ride.ftp, lthr: ride.lthr, maxhr: ride.max_hr,
-    wellness: w, allActivities: a, activities: a.filter(x => x.date >= since56), events: e };
+    wellness: w, allActivities: a, activities: a.filter(x => x.date >= since56), events: e, raceEvents };
 }
 
 /* ---------- Datos de ejemplo (se muestran sin clave, marcados como ejemplo) ---------- */
@@ -410,6 +430,8 @@ Criterios que aplicás:
 - El gimnasio (WeightTraining) suele tener carga cargada a mano y fija: tomala como aproximada y usá el RPE para estimar su costo real. No cargues piernas pesado el día antes de una sesión de calidad en bici.
 - Aprendés de la historia de este atleta: los "aprendizajes" acumulados, el historial "plan vs real" y las 52 semanas. Calibrá con eso: si suele no cumplir cierto día, no pongas calidad ahí; si su RPE real supera sistemáticamente al esperado, bajá la intensidad o el volumen; repetí los tipos de bloque que le hicieron subir la fitness sin disparar el RPE y evitá los que terminaron en caída de cumplimiento. Los aprendizajes que el atleta rechazó no se vuelven a proponer.
 - Si el "modelo de rendimiento personal" está validado, sus tiempos mandan sobre las reglas generales: la descarga previa a una carrera dura lo que indica su pico con descanso total, y los descansos se dimensionan con su constante de fatiga.
+- Clima: con probabilidad de lluvia alta, tormenta o ráfagas fuertes, pasá la sesión de calidad a rodillo (VirtualRide) o a otro día; con calor de más de 30 °C bajá la intensidad y avisá hidratación; con frío intenso, alargá la entrada en calor. Decilo en "detalle".
+- Carreras: para cada carrera próxima, buscá en el historial las del mismo tipo y compará forma de llegada (tsb_pct), carga de la semana previa, clima y resultado. Replicá la preparación con la que mejor rindió en ese tipo y advertí si el clima pronosticado para el lugar se parece a uno en el que le fue mal.
 - Respetá las carreras del calendario (RACE_A es el objetivo principal: llegar con forma de +5% a +20%, con 7–10 días de descarga previa).
 Reglas:
 - Cada afirmación se apoya en un dato concreto del contexto (fecha y número). Si falta un dato, lo decís; no inventás.
@@ -446,6 +468,150 @@ function compactData(D, days){
 }
 const r1 = v => v==null || isNaN(v) ? undefined : Math.round(v*10)/10;
 
+/* ---- Disponibilidad: semana estándar + cambios de esta semana ---- */
+const MODES = [
+  ["bici","Bici: plan del coach"],
+  ["gym_bici","Gimnasio + bici"],
+  ["gym","Gimnasio"],
+  ["clase","Clase con profe (recepción)"],
+  ["libre","Libre: decide el coach"],
+  ["descanso","Descanso"]
+];
+const MODE_LABEL = Object.fromEntries(MODES);
+const DEFAULT_STD = {1:"gym", 2:"bici", 3:"gym", 4:"bici", 5:"gym", 6:"bici", 0:"libre"};
+const stdWeek = () => ({ ...DEFAULT_STD, ...(cacheGet("week.std")||{}) });
+const overrides = () => cacheGet("week.override") || {};
+const dowOf = f => new Date(f+"T12:00:00").getDay();
+function modeOf(f){ return overrides()[f] || stdWeek()[dowOf(f)] }
+function weekDates(){
+  const today = iso(new Date()), wk = cacheGet("coach.week");
+  let s, e;
+  if(new Date().getDay()!==1 && wk && wk.r.dias[wk.r.dias.length-1].fecha >= today){ s = today; e = wk.r.dias[wk.r.dias.length-1].fecha }
+  else { const wr = weekRange(); s = wr.start; e = wr.end }
+  const out = []; for(let d = new Date(s+"T12:00:00"); iso(d) <= e; d = addDays(d,1)) out.push(iso(d));
+  return out;
+}
+function median(a){ if(!a.length) return null; const s = [...a].sort((x,y)=>x-y), m = Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2 }
+/* Carga estimada de un día en recepción: primero los días marcados así en el historial; si no alcanzan, el mismo día de la semana en las últimas 8 semanas */
+function estimateFor(mode, f, D){
+  const tipo = mode==="clase" ? "Clase" : "WeightTraining";
+  let rows = (cacheGet("coach.history")||[]).flatMap(h => h.dias).filter(d => d.plan_tipo===tipo && d.real_load > 0)
+    .map(d => ({ load:d.real_load, min:d.real_min, rpe:d.rpe }));
+  let fuente = `historial de días marcados como ${mode==="clase" ? "clase" : "gimnasio"}`;
+  if(rows.length < 2){
+    const since = iso(addDays(new Date(), -56)), wd = dowOf(f), by = {};
+    (D.allActivities||D.activities).filter(a => a.date >= since && dowOf(a.date)===wd && (mode!=="gym" || a.type==="WeightTraining"))
+      .forEach(a => { const x = (by[a.date] ||= {load:0, min:0, rpe:[]}); x.load += a.load||0; x.min += (a.time||0)/60; if(a.rpe) x.rpe.push(a.rpe) });
+    rows = Object.values(by).map(x => ({ load:x.load, min:x.min, rpe: x.rpe.length ? Math.max(...x.rpe) : null }));
+    fuente = `mismo día de la semana, últimas 8 semanas`;
+  }
+  if(!rows.length) return null;
+  const rp = rows.map(r => r.rpe).filter(Boolean);
+  return { load: Math.round(median(rows.map(r=>r.load))), min: Math.round(median(rows.map(r=>r.min))), rpe: rp.length ? median(rp) : null, sesiones: rows.length, fuente };
+}
+function availability(D){
+  const o = overrides();
+  return weekDates().map(f => { const modo = modeOf(f);
+    const est = modo==="clase" ? estimateFor("clase", f, D) : (modo==="gym" || modo==="gym_bici") ? estimateFor("gym", f, D) : null;
+    return { fecha:f, dia:DOW[dowOf(f)], modo, cambiado_esta_semana: !!o[f], estimado: est || undefined };
+  });
+}
+const noteKey = () => "week.note." + weekDates().slice(-1)[0];
+const weekNote = () => store.get(noteKey()) || "";
+
+/* ---------- Clima (Open-Meteo: sin clave, pronóstico 16 días e histórico) ---------- */
+const WX = {0:"Despejado",1:"Mayormente despejado",2:"Parcialmente nublado",3:"Nublado",45:"Niebla",48:"Niebla",51:"Llovizna",53:"Llovizna",55:"Llovizna",56:"Llovizna helada",57:"Llovizna helada",61:"Lluvia débil",63:"Lluvia",65:"Lluvia fuerte",66:"Lluvia helada",67:"Lluvia helada",71:"Nieve",73:"Nieve",75:"Nieve fuerte",77:"Nieve",80:"Chaparrones",81:"Chaparrones",82:"Chaparrones fuertes",85:"Nieve",86:"Nieve",95:"Tormenta",96:"Tormenta con granizo",99:"Tormenta con granizo"};
+const WX_DAILY = "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max";
+async function geocode(q){
+  let r;
+  try{ r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=es&format=json`) }
+  catch(e){ throw new Error("No se pudo buscar el lugar. Revisá la conexión.") }
+  if(!r.ok) throw new Error(`El buscador de lugares respondió ${r.status}.`);
+  const j = await r.json();
+  return (j.results||[]).map(x => ({ name: [x.name, x.admin1, x.country].filter(Boolean).join(", "), lat: x.latitude, lon: x.longitude }));
+}
+async function weatherDaily(place, start, end){
+  const past = start < iso(addDays(new Date(), -60));
+  const base = past ? "https://archive-api.open-meteo.com/v1/archive" : "https://api.open-meteo.com/v1/forecast";
+  const daily = past ? WX_DAILY.replace(",precipitation_probability_max","") : WX_DAILY;
+  const r = await fetch(`${base}?latitude=${place.lat}&longitude=${place.lon}&daily=${daily}&timezone=auto&start_date=${start}&end_date=${end}`);
+  if(!r.ok) throw new Error("clima " + r.status);
+  const d = (await r.json()).daily || {};
+  return (d.time||[]).map((t,i) => ({ fecha:t, cielo: WX[d.weather_code?.[i]] || "—", tmax: d.temperature_2m_max?.[i], tmin: d.temperature_2m_min?.[i],
+    lluvia_mm: d.precipitation_sum?.[i], prob_lluvia: d.precipitation_probability_max?.[i], viento_kmh: d.wind_speed_10m_max?.[i], rafagas_kmh: d.wind_gusts_10m_max?.[i] }));
+}
+const homePlace = () => cacheGet("place.home");
+async function loadWeather(){
+  const p = homePlace(); if(!p) { state.wx = null; return }
+  try{ state.wx = await weatherDaily(p, iso(new Date()), iso(addDays(new Date(), 9))); cacheSet("wx.home", {at:Date.now(), d:state.wx}) }
+  catch(_){ const c = cacheGet("wx.home"); state.wx = c?.d || null }
+}
+const wxLine = w => w ? `${w.cielo} · ${n0(w.tmin)}–${n0(w.tmax)} °C${w.prob_lluvia!=null ? ` · lluvia ${w.prob_lluvia}%` : w.lluvia_mm ? ` · ${String(w.lluvia_mm).replace(".",",")} mm` : ""} · viento ${n0(w.viento_kmh)} km/h` : "";
+
+/* ---------- Carreras: registro con lugar, tipo y resultado; se cruzan con actividad, forma y clima ---------- */
+const RACE_TYPES = ["Ruta","Criterium","Gran Fondo","Contrarreloj","Gravel","MTB","Carrera por etapas","Otra"];
+const races = () => cacheGet("races") || [];
+function mergeRaceEvents(D){
+  const list = races(); let changed = false;
+  (D.raceEvents||[]).forEach(e => {
+    if(list.some(r => String(r.eventId)===String(e.id)) || (cacheGet("races.hidden")||[]).includes(String(e.id))) return;
+    list.push({ id:"ev"+e.id, eventId:e.id, name:e.name || "Carrera", date:e.date, prioridad:(e.cat||"RACE_B").slice(-1), tipo:"Otra", lugar:null, desdeIntervals:true }); changed = true;
+  });
+  if(changed) cacheSet("races", list);
+}
+function raceStats(r, D){
+  const acts = (D.allActivities||D.activities).filter(a => a.date===r.date);
+  const main = acts.sort((p,q) => (q.load||0) - (p.load||0))[0];
+  const w = D.wellness.find(x => x.date===r.date);
+  const prev = (D.allActivities||D.activities).filter(a => a.date < r.date && a.date >= iso(addDays(new Date(r.date+"T12:00:00"), -7)));
+  return {
+    actividad: main ? { nombre: main.name, min: main.time?Math.round(main.time/60):undefined, km: main.dist? r1(main.dist/1000):undefined, np: main.np, fc: main.hr?Math.round(main.hr):undefined, if: main.ifac? r1(main.ifac):undefined, load: main.load, rpe: main.rpe } : undefined,
+    forma: w && w.ctl!=null ? { ctl: r1(w.ctl), atl: r1(w.atl), tsb: r1(w.ctl-w.atl), tsb_pct: w.ctl ? Math.round((w.ctl-w.atl)/w.ctl*100) : undefined } : undefined,
+    carga_7d_previa: Math.round(sum(prev, a => a.load))
+  };
+}
+function racesForPrompt(D){
+  const today = iso(new Date());
+  return races().map(r => ({ fecha:r.date, nombre:r.name, tipo:r.tipo, prioridad:r.prioridad, lugar: r.lugar?.name, km:r.km, desnivel_m:r.desnivel, objetivo:r.objetivo,
+    clima: r.clima ? wxLine(r.clima) : undefined, ...(r.date <= today ? { ...raceStats(r, D), posicion: r.posicion, comentario: r.comentario } : { faltan_dias: Math.round((new Date(r.date+"T12:00:00") - new Date(today+"T12:00:00"))/864e5) }) }));
+}
+/* Clima de cada carrera: pronóstico si faltan 16 días o menos; histórico si ya pasó */
+async function loadRaceWeather(){
+  const list = races(), today = iso(new Date()), lim = iso(addDays(new Date(), 15)); let changed = false;
+  for(const r of list){
+    if(!r.lugar || r.date > lim) continue;
+    const fresh = r.clima && (r.date < today ? r.climaFinal : (Date.now() - (r.climaAt||0)) < 6*3600e3);
+    if(fresh) continue;
+    try{ const d = await weatherDaily(r.lugar, r.date, r.date); if(d[0]){ r.clima = d[0]; r.climaAt = Date.now(); r.climaFinal = r.date < iso(addDays(new Date(),-2)); changed = true } }catch(_){}
+  }
+  if(changed){ cacheSet("races", list); render() }
+}
+async function saveRace(form){
+  const list = races(), id = state.raceEdit || ("r"+Date.now());
+  const prev = list.find(r => r.id===id) || {};
+  const r = { ...prev, id, name: form.name, date: form.date, tipo: form.tipo, prioridad: form.prioridad, km: form.km ? +form.km : undefined,
+    desnivel: form.desnivel ? +form.desnivel : undefined, objetivo: form.objetivo || undefined, posicion: form.posicion || undefined, comentario: form.comentario || undefined,
+    lugar: state.racePlace || prev.lugar || null };
+  if(r.lugar !== prev.lugar || r.date !== prev.date){ delete r.clima; delete r.climaFinal }
+  if(!state.demo){
+    const body = { category: "RACE_"+r.prioridad, start_date_local: `${r.date}T00:00:00`, type: "Ride", name: r.name,
+      description: [r.tipo, r.lugar?.name, r.km ? r.km+" km" : "", r.desnivel ? r.desnivel+" m de desnivel" : "", r.objetivo].filter(Boolean).join(" · ") };
+    const ev = r.eventId ? await api(`/events/${r.eventId}`, {}, {method:"PUT", body}) : await api("/events", {}, {method:"POST", body});
+    r.eventId = ev?.id ?? r.eventId;
+  }
+  const i = list.findIndex(x => x.id===id); if(i>=0) list[i] = r; else list.push(r);
+  list.sort((p,q) => p.date.localeCompare(q.date));
+  cacheSet("races", list);
+}
+
+const AVAIL_RULES = `Reglas por modo de disponibilidad (la disponibilidad manda sobre cualquier otra regla y sobre lo que haya en el calendario de Intervals):
+- bici: sesión de bici planificada por vos, con workout.
+- gym_bici: gimnasio y además bici el mismo día. Un solo registro: tipo Ride, sesion "Gimnasio + …", load = carga de gimnasio estimada + bici, workout solo de la parte de bici, y la bici compatible con el gimnasio (sin calidad si es de piernas).
+- gym: tipo WeightTraining, sesion "Gimnasio", no estructures su contenido, load = estimado.load (o tu estimación si no hay), workout vacío.
+- clase: MODO RECEPCIÓN. El contenido lo decide un profesor y cambia cada vez. tipo "Clase", sesion "Clase con profesor", no planifiques su contenido, load = estimado.load y rpe_esperado = estimado.rpe (o tu estimación si no hay), workout vacío. Planificá el resto de la semana asumiendo esa carga y evitá calidad en bici el día anterior si su RPE habitual es alto.
+- libre: decidí vos entre bici, recuperación o descanso.
+- descanso: tipo Descanso, load 0.`;
+
 /* Semana de entrenamiento: se planifica el lunes, de martes a lunes */
 function weekRange(today = new Date()){
   const t = new Date(today); t.setHours(12,0,0,0);
@@ -471,7 +637,7 @@ Bloque principal 3x
 Vuelta a la calma
 - 10m 50%
 Para gimnasio, descanso u otras actividades, "workout" va vacío.`;
-const DIA_SHAPE = `{"fecha":"YYYY-MM-DD","tipo":"Ride|VirtualRide|WeightTraining|Run|Descanso","sesion":"nombre corto","detalle":"objetivo de la sesión en una línea","min":0,"load":0,"rpe_esperado":0,"workout":"texto en sintaxis intervals o vacío"}`;
+const DIA_SHAPE = `{"fecha":"YYYY-MM-DD","tipo":"Ride|VirtualRide|WeightTraining|Clase|Run|Descanso","sesion":"nombre corto","detalle":"objetivo de la sesión en una línea","min":0,"load":0,"rpe_esperado":0,"workout":"texto en sintaxis intervals o vacío"}`;
 /* ---- Memoria del coach: plan vs real, aprendizajes y 52 semanas ---- */
 const sum = (arr, f) => arr.reduce((t,x) => t + (f(x)||0), 0);
 function mondayOf(dateStr){ const d = new Date(dateStr+"T12:00:00"); return iso(addDays(d, -((d.getDay()+6)%7))) }
@@ -516,6 +682,8 @@ function header(D, ctx){
 Atleta: ${D.name}. FTP: ${D.ftp ?? "sin dato"} W. Umbral FC: ${D.lthr ?? "sin dato"}. FC máx: ${D.maxhr ?? "sin dato"}.
 Contexto que da el atleta: ${ctx || "no informado"}.
 ${modelSummary()}
+Pronóstico del clima donde entrena (${homePlace()?.name || "lugar no configurado"}): ${state.wx ? JSON.stringify(state.wx) : "no disponible"}.
+Carreras del atleta (pasadas con resultado, forma con la que llegó, carga de la semana previa y clima; futuras con días que faltan): ${races().length ? JSON.stringify(racesForPrompt(D)) : "ninguna registrada"}.
 Aprendizajes acumulados sobre este atleta: ${notes().length ? JSON.stringify(notes()) : "todavía ninguno"}.
 Aprendizajes que el atleta rechazó (no repetir): ${rejected().length ? JSON.stringify(rejected()) : "ninguno"}.
 Historial plan vs real de semanas anteriores (rpe_esperado lo fijaste vos al planificar): ${hist.length ? JSON.stringify(hist) : "todavía no hay semanas registradas"}.
@@ -524,12 +692,14 @@ Detalle reciente (wellness 42 días, actividades 8 semanas con RPE, planificado 
 ${JSON.stringify(compactData(D, 42))}`;
 }
 async function runWeek(){
-  const D = state.data, {ctx} = aiCfg(), wr = weekRange();
+  const D = state.data, {ctx} = aiCfg(), wd = weekDates(), wr = { start: wd[0], end: wd[wd.length-1] };
   const prompt = `${header(D, ctx)}
 
 Planificá la semana del ${wr.start} al ${wr.end} (un registro por día, también los de descanso).
-- Decidí cuánto entrenar (carga semanal) y dónde van los descansos según la forma, la rampa, el bienestar y los RPE recientes.
-- Si en el calendario ya hay gimnasio u otras sesiones planificadas, mantenelas en su día como están y planificá la bici alrededor.
+Disponibilidad de la semana: ${JSON.stringify(availability(D))}
+Nota del atleta para esta semana: ${weekNote() || "ninguna"}
+${AVAIL_RULES}
+- Decidí cuánto entrenar (carga semanal) y dónde van los descansos según la forma, la rampa, el bienestar y los RPE recientes, contando la carga estimada de gimnasio y clases.
 - "rpe_esperado" es el RPE (1–10) que esperás que reporte en cada sesión; 0 en descanso. Sirve para medir después si calibraste bien.
 - Antes de planificar, revisá el historial plan vs real y actualizá los aprendizajes: conservá los que siguen valiendo, corregí los que los datos contradicen y sumá nuevos solo con evidencia de al menos dos situaciones. Máximo 12, cada uno en una frase con su evidencia entre paréntesis.
 ${WORKOUT_SYNTAX}
@@ -547,9 +717,12 @@ async function runDaily(){
   const prompt = `${header(D, ctx)}
 
 Plan de la semana vigente: ${plan ? JSON.stringify(plan) : "no hay plan semanal todavía"}.
+Disponibilidad vigente de los días que quedan (si difiere del plan, el atleta la cambió después de planificar): ${JSON.stringify(availability(D))}
+Nota del atleta para esta semana: ${weekNote() || "ninguna"}
+${AVAIL_RULES}
 Revisá lo que hizo hasta hoy contra el plan (cumplimiento, carga real y RPE) y decidí:
 1. Si la sesión planificada para hoy es apropiada, hay que ajustarla o conviene descansar.
-2. Si hace falta cambiar días que quedan de la semana. Solo incluí en "ajustes" los días que cambian, desde hoy en adelante y nunca después del ${plan ? plan[plan.length-1].fecha : iso(addDays(new Date(),6))}.
+2. Si hace falta cambiar días que quedan de la semana. Si una clase o un gimnasio ya se hizo, usá su carga y su RPE reales (no el estimado) para recalcular la bici de los días que quedan. Los días de clase y gimnasio futuros no se replanifican: solo cambian si la disponibilidad cambió. Si la disponibilidad de un día cambió respecto del plan, ese día va en ajustes con su nuevo modo. Solo incluí en "ajustes" los días que cambian, desde hoy en adelante y nunca después del ${plan ? plan[plan.length-1].fecha : iso(addDays(new Date(),6))}.
 ${WORKOUT_SYNTAX}
 Devolvé exactamente este JSON:
 {"semaforo":"verde|amarillo|rojo","estado":"una frase con el diagnóstico de hoy",
@@ -630,7 +803,7 @@ function barChart(values, labels, aria){
 const shortDate = s => { const d = new Date(s+"T12:00:00"); return `${d.getDate()} ${MES[d.getMonth()]}` };
 
 /* ---------- Vistas ---------- */
-const TITLES = {hoy:"Hoy", modelo:"Modelo", coach:"Coach", analisis:"Análisis", actividades:"Actividades", plan:"Plan", bienestar:"Bienestar", ajustes:"Ajustes"};
+const TITLES = {hoy:"Hoy", carreras:"Carreras", modelo:"Modelo", coach:"Coach", analisis:"Análisis", actividades:"Actividades", plan:"Plan", bienestar:"Bienestar", ajustes:"Ajustes"};
 const LIGHT = { verde:["--good","Verde"], amarillo:["--warn","Amarillo"], rojo:["--bad","Rojo"] };
 const VERD = { "bien":["--good","Rindió bien"], "normal":["--ctl","Normal"], "por debajo":["--bad","Por debajo"] };
 const busyBtn = (id, label, busy) => `<button class="btn primary" id="${id}" ${busy?"disabled":""}>${busy?"Analizando… (puede tardar 20–40 s)":label}</button>`;
@@ -664,6 +837,28 @@ async function saveRpe(id, n){
 }
 
 /* ---- Coach: semana + revisión diaria ---- */
+const modeSelect = (id, attr, val, cur) => `<select id="${id}" ${attr}="${val}">${MODES.map(([v,l]) => `<option value="${v}" ${cur===v?"selected":""}>${esc(l)}</option>`).join("")}</select>`;
+function viewAvail(D){
+  const wk = cacheGet("coach.week"), dates = weekDates(), o = overrides();
+  const changed = wk?.modes ? dates.filter(f => wk.modes[f] && wk.modes[f] !== modeOf(f)) : [];
+  return `<section class="card"><h2>Disponibilidad · ${shortDate(dates[0])} al ${shortDate(dates[dates.length-1])}</h2>
+    <p class="note">Sale de la semana estándar de Ajustes. Si esta semana algo cambia, cambialo acá antes de planificar o de revisar el día. En "clase con profe" el coach no planifica: estima la carga con la historia de esas clases y, cuando la hacés, recalcula el resto con los datos reales.</p>
+    <div class="list" style="margin-top:8px">${dates.map(f => `<div class="avail">${dateCell(f)}<div>${modeSelect("av-"+f, "data-avail", f, modeOf(f))}${o[f] ? `<span class="chip" style="color:var(--warn);margin-top:6px">Cambiado esta semana</span>` : ""}</div></div>`).join("")}</div>
+    <label for="weeknote">Algo más para esta semana</label>
+    <textarea id="weeknote" style="min-height:70px" placeholder="Ej.: el jueves viajo; el sábado puedo hasta 4 horas.">${esc(weekNote())}</textarea>
+    ${changed.length ? `<p class="msg bad">Cambiaste ${changed.length === 1 ? "un día" : changed.length + " días"} después de planificar. Tocá "Revisar hoy" para que ajuste esos días, o replanificá la semana.</p>` : ""}
+  </section>`;
+}
+function viewWeather(){
+  const p = homePlace();
+  if(!p) return `<section class="card"><h2>Clima</h2><p class="note">Configurá dónde entrena en <a href="#" data-go="ajustes">Ajustes</a> para ver el pronóstico y que el coach lo tenga en cuenta.</p></section>`;
+  if(!state.wx) return `<section class="card"><h2>Clima · ${esc(p.name.split(",")[0])}</h2><p class="note">Cargando pronóstico…</p></section>`;
+  const days = state.wx.slice(0,7);
+  return `<section class="card"><h2>Clima · ${esc(p.name.split(",")[0])}</h2><div class="wx">${days.map(w => {
+    const bad = (w.prob_lluvia||0) >= 60 || (w.rafagas_kmh||0) >= 50 || /Tormenta/.test(w.cielo);
+    return `<div class="wxd${bad?" bad":""}"><small>${DOW[dowOf(w.fecha)]}</small><b>${n0(w.tmax)}°</b><span>${n0(w.tmin)}°</span><span title="${esc(w.cielo)}">${w.prob_lluvia!=null ? w.prob_lluvia+"%" : "—"}</span><span>${n0(w.viento_kmh)}</span></div>` }).join("")}</div>
+    <div class="legend"><span>máx · mín · lluvia · viento km/h</span><span style="color:var(--warn)">En amarillo: lluvia, tormenta o viento fuerte</span></div></section>`;
+}
 const VERD_HOY = { apropiada:["--good","Sesión de hoy: apropiada"], ajustar:["--warn","Sesión de hoy: ajustar"], descansar:["--bad","Hoy: descansar"] };
 const BIKE = t => /Ride/.test(t||"");
 function viewCoach(D){
@@ -672,7 +867,7 @@ function viewCoach(D){
   const today = iso(new Date()), isMon = new Date().getDay()===1;
   const weekStale = !wk || wk.r.dias[wk.r.dias.length-1].fecha < today;
   const r = dc?.date===today ? dc.r : null;
-  let html = demoNote() + viewRpe(D);
+  let html = demoNote() + viewRpe(D) + viewAvail(D);
 
   /* Semana */
   const w = wk?.r;
@@ -695,6 +890,7 @@ function viewCoach(D){
       const past = d.fecha < today, isT = d.fecha===today;
       const chips = [
         isT ? `<span class="chip" style="color:var(--accent)">Hoy</span>` : "",
+        d.tipo==="Clase" ? `<span class="chip" style="color:var(--atl)">Recepción</span>` : "",
         d.ajustado ? `<span class="chip" style="color:var(--warn)">Ajustado</span>` : "",
         d.eventId && !d.dirty ? `<span class="chip" style="color:var(--good)">En Garmin</span>` : "",
         d.eventId && d.dirty ? `<span class="chip" style="color:var(--warn)">Cambio sin mandar</span>` : ""
@@ -745,7 +941,8 @@ async function doWeek(){
     if(Array.isArray(r.aprendizajes)) cacheSet("coach.notes", r.aprendizajes.filter(Boolean).slice(0,12));
     const old = cacheGet("coach.week");
     (r.dias||[]).forEach(d => { const prev = old?.r.dias.find(x => x.fecha===d.fecha); if(prev?.eventId){ d.eventId = prev.eventId; d.dirty = true } });
-    cacheSet("coach.week", {at:Date.now(), r});
+    const modes = {}; (r.dias||[]).forEach(d => modes[d.fecha] = modeOf(d.fecha));
+    cacheSet("coach.week", {at:Date.now(), r, modes});
   }catch(e){ state.aiError="week"; state.aiErrorMsg=e.message }
   state.busy=null; try{ state.model = fitModel(state.data) }catch(_){} render();
 }
@@ -818,6 +1015,63 @@ function viewModelo(D){
   </section>
   ${how}`;
 }
+const daysTo = f => Math.round((new Date(f+"T12:00:00") - new Date(iso(new Date())+"T12:00:00"))/864e5);
+const PRIO = { A:"--bad", B:"--warn", C:"--grey" };
+function nextRaceCard(D){
+  const r = races().find(x => x.date >= iso(new Date())); if(!r) return "";
+  const n = daysTo(r.date);
+  return `<section class="card"><h2>Próxima carrera</h2>
+    <p class="lead" style="margin-top:0">${esc(r.name)}</p>
+    <p class="note">${[n===0 ? "Hoy" : n===1 ? "Mañana" : `Faltan ${n} días`, shortDate(r.date), r.tipo, r.lugar?.name.split(",")[0]].filter(Boolean).map(esc).join(" · ")}</p>
+    ${r.clima ? `<p style="margin:8px 0 0">${esc(wxLine(r.clima))}</p>` : r.lugar && n > 15 ? `<p class="stamp">El pronóstico del lugar aparece cuando falten 16 días.</p>` : ""}
+    <button class="mini" data-go="carreras">Ver carreras</button></section>`;
+}
+function raceRow(r, D){
+  const past = r.date < iso(new Date()), s = past ? raceStats(r, D) : null, a = s?.actividad;
+  const meta = [r.tipo, r.lugar?.name.split(",")[0], r.km ? r.km+" km" : "", r.desnivel ? r.desnivel+" m" : ""].filter(Boolean).join(" · ");
+  const res = past ? [a ? fmtDur(a.min*60) : "sin actividad registrada", a?.np ? a.np+" W NP" : "", a?.rpe ? "RPE "+a.rpe : "", r.posicion ? "puesto "+r.posicion : ""].filter(Boolean).join(" · ") : "";
+  const form = s?.forma ? `llegó con forma ${s.forma.tsb_pct>0?"+":""}${s.forma.tsb_pct}% · carga 7 días previos ${s.carga_7d_previa}` : "";
+  return `<div class="row">${dateCell(r.date)}<div class="t"><b>${esc(r.name)}</b>
+    <span style="white-space:normal"><span class="chip" style="color:var(${PRIO[r.prioridad]||"--grey"})">${esc(r.prioridad)}</span>${esc(meta)}</span>
+    ${r.clima ? `<span style="white-space:normal;display:block">${esc(wxLine(r.clima))}</span>` : ""}
+    ${res ? `<span style="white-space:normal;display:block;color:var(--fg)">${esc(res)}</span>` : ""}
+    ${form ? `<span style="white-space:normal;display:block">${esc(form)}</span>` : ""}
+    ${!r.lugar ? `<span style="white-space:normal;display:block;color:var(--warn)">Falta el lugar: editala para sumar el clima</span>` : ""}
+    <button class="mini" data-race-edit="${esc(r.id)}">Editar${past ? " o cargar resultado" : ""}</button></div>
+    <div class="load">${past ? (a?.load ? n0(a.load) : "—") : daysTo(r.date)}<small>${past ? "CARGA" : "DÍAS"}</small></div></div>`;
+}
+function viewCarreras(D){
+  const list = races(), today = iso(new Date());
+  const ed = state.raceEdit ? list.find(r => r.id===state.raceEdit) || {} : {};
+  const place = state.racePlace || ed.lugar;
+  const upcoming = list.filter(r => r.date >= today), past = list.filter(r => r.date < today).reverse();
+  const byType = {}; past.forEach(r => (byType[r.tipo] ||= []).push(r));
+  const isPast = ed.date && ed.date < today;
+  let html = `${demoNote()}<section class="card"><h2>${state.raceEdit ? "Editar carrera" : "Agregar carrera"}</h2>
+    <form id="raceform" autocomplete="off">
+      <label for="rc-name">Nombre</label><input type="text" id="rc-name" required value="${esc(ed.name||"")}" placeholder="Ej.: Gran Fondo Tandil">
+      <div class="two"><div><label for="rc-date">Fecha</label><input type="date" id="rc-date" required value="${esc(ed.date||"")}"></div>
+        <div><label for="rc-prio">Prioridad</label><select id="rc-prio">${["A","B","C"].map(p => `<option value="${p}" ${(ed.prioridad||"B")===p?"selected":""}>${p}${p==="A"?" · objetivo principal":p==="B"?" · importante":" · preparación"}</option>`).join("")}</select></div></div>
+      <label for="rc-tipo">Tipo</label><select id="rc-tipo">${RACE_TYPES.map(t => `<option ${(ed.tipo||"Ruta")===t?"selected":""}>${t}</option>`).join("")}</select>
+      <label for="rc-place">Lugar</label>
+      <div class="search"><input type="text" id="rc-place" placeholder="Ciudad o pueblo" value="${esc(place?.name||"")}"><button class="btn" type="button" id="rc-find">Buscar</button></div>
+      <div class="picks" id="rc-picks"></div>
+      <p class="stamp" id="rc-chosen">${place ? "Lugar elegido: " + esc(place.name) : ""}</p>
+      <div class="two"><div><label for="rc-km">Distancia (km)</label><input type="text" inputmode="decimal" id="rc-km" value="${esc(ed.km??"")}"></div>
+        <div><label for="rc-elev">Desnivel (m)</label><input type="text" inputmode="numeric" id="rc-elev" value="${esc(ed.desnivel??"")}"></div></div>
+      <label for="rc-obj">Objetivo</label><input type="text" id="rc-obj" value="${esc(ed.objetivo||"")}" placeholder="Ej.: terminar en menos de 5 h, top 20 de la categoría">
+      ${isPast ? `<label for="rc-pos">Resultado: puesto</label><input type="text" id="rc-pos" value="${esc(ed.posicion||"")}" placeholder="Ej.: 14 de 120 en la categoría">
+        <label for="rc-com">Cómo le fue</label><textarea id="rc-com" placeholder="Ej.: se cortó en la segunda subida; calambres en el km 90.">${esc(ed.comentario||"")}</textarea>` : ""}
+      <div class="btns"><button class="btn primary" type="submit" id="rc-save">Guardar carrera</button>
+        ${state.raceEdit ? `<button class="btn" type="button" id="rc-cancel">Cancelar</button><button class="btn danger" type="button" id="rc-del">Borrar de la app</button>` : ""}</div>
+      <p class="msg ${state.raceMsg?.ok ? "ok" : "bad"}" id="rc-msg" role="status">${state.raceMsg ? esc(state.raceMsg.t) : ""}</p>
+    </form>
+    <p class="note" style="margin-top:12px">Se carga también en el calendario de Intervals como carrera ${"A, B o C"}, así el coach y el Garmin la ven. El clima del lugar se suma solo: pronóstico cuando faltan 16 días o menos, y el histórico del día cuando ya pasó.</p></section>`;
+  if(upcoming.length) html += `<section class="card"><h2>Próximas</h2><div class="list">${upcoming.map(r => raceRow(r, D)).join("")}</div></section>`;
+  Object.entries(byType).forEach(([t, rs]) => html += `<section class="card"><h2>Historial · ${esc(t)} · ${rs.length}</h2><div class="list">${rs.map(r => raceRow(r, D)).join("")}</div></section>`);
+  if(!list.length) html += `<section class="card"><p class="note">Todavía no hay carreras. Las que ya estén en el calendario de Intervals como carrera aparecen solas; completales el tipo y el lugar para que entren al historial.</p></section>`;
+  return html;
+}
 function viewAnalisis(D){
   const act = D.activities.find(a => String(a.id)===String(state.actId));
   if(!act) return `<section class="card"><p class="note">No encuentro esa actividad. Volvé a <a href="#" data-go="actividades">Actividades</a>.</p></section>`;
@@ -843,11 +1097,12 @@ async function doDaily(){
   try{
     const r = await runDaily(); cacheSet("coach.daily", {date:iso(new Date()), at:Date.now(), r});
     const wk = cacheGet("coach.week");
-    if(wk && (r.ajustes||[]).length){
-      r.ajustes.forEach(a => { const i = wk.r.dias.findIndex(d => d.fecha===a.fecha); if(i<0) return;
+    if(wk){
+      (r.ajustes||[]).forEach(a => { const i = wk.r.dias.findIndex(d => d.fecha===a.fecha); if(i<0) return;
         const prev = wk.r.dias[i];
         wk.r.dias[i] = { ...a, ajustado:true, eventId: prev.eventId, dirty: !!prev.eventId };
       });
+      wk.modes = wk.modes || {}; wk.r.dias.forEach(d => { if(d.fecha >= iso(new Date())) wk.modes[d.fecha] = modeOf(d.fecha) });
       cacheSet("coach.week", wk);
     }
   }
@@ -883,6 +1138,8 @@ function viewHoy(D){
   ${demoNote()}
   ${viewRpe(D)}
   ${coachCard}
+  ${nextRaceCard(D)}
+  ${viewWeather()}
   <section class="card">
     <h2>Forma de hoy · ${esc(D.name)}</h2>
     <div class="form-hero">
@@ -975,6 +1232,19 @@ function viewAjustes(){
     </form>
   </section>
   <section class="card">
+    <h2>Semana estándar</h2>
+    <p class="note">Qué hace habitualmente cada día. El coach planifica la bici alrededor. En "clase con profe" no planifica nada: estima la carga con la historia de esas clases y recalcula el resto de la semana cuando se hace.</p>
+    <div class="list" style="margin-top:8px">${[1,2,3,4,5,6,0].map(d => `<div class="avail"><div class="date"><b style="font-size:18px">${DOW[d]}</b></div>${modeSelect("std-"+d, "data-std", d, stdWeek()[d])}</div>`).join("")}</div>
+    <p class="stamp">Se guarda al cambiarlo.</p>
+  </section>
+  <section class="card">
+    <h2>Dónde entrena</h2>
+    <p class="note">Para el pronóstico del clima. ${homePlace() ? `Ahora: <b>${esc(homePlace().name)}</b>.` : "Todavía no está configurado."}</p>
+    <div class="search" style="margin-top:10px"><input type="text" id="home-q" placeholder="Ciudad" aria-label="Ciudad donde entrena"><button class="btn" type="button" id="home-find">Buscar</button></div>
+    ${state.homeResults ? `<div class="picks">${state.homeResults.length ? state.homeResults.map((p,i) => `<button type="button" class="pick" data-home="${i}">${esc(p.name)}</button>`).join("") : `<p class="note">No encontré ese lugar.</p>`}</div>` : ""}
+    ${state.homeMsg ? `<p class="msg bad">${esc(state.homeMsg)}</p>` : ""}
+  </section>
+  <section class="card">
     <h2>Coach con IA</h2>
     <form id="aicfg" autocomplete="off">
       <label for="aikey">Clave de la API de Anthropic</label>
@@ -993,7 +1263,7 @@ function viewAjustes(){
   </section>
   <section class="card">
     <h2>Memoria del coach</h2>
-    <p class="note">Los aprendizajes, el historial plan contra real y el plan vigente viven en este teléfono. Copiá el respaldo cada tanto y guardalo en una nota; para pasarlo a otro teléfono, pegalo acá y restaurá.</p>
+    <p class="note">Los aprendizajes, el historial plan contra real, el plan vigente, la semana estándar y las carreras viven en este teléfono. Copiá el respaldo cada tanto y guardalo en una nota; para pasarlo a otro teléfono, pegalo acá y restaurá.</p>
     <div class="btns"><button class="btn" type="button" id="bkcopy">Copiar respaldo</button></div>
     <label for="bktext">Pegar respaldo</label>
     <textarea id="bktext" placeholder='{"coach.notes": …}'></textarea>
@@ -1023,12 +1293,18 @@ function render(){
   let html = "";
   if(state.error && v!=="ajustes") html += `<section class="card err"><p>${esc(state.error)}</p></section>`;
   if(v==="ajustes") html += viewAjustes();
-  else if(state.data) html += ({hoy:viewHoy, modelo:viewModelo, coach:viewCoach, analisis:viewAnalisis, actividades:viewActividades, plan:viewPlan, bienestar:viewBienestar})[v](state.data);
+  else if(state.data) html += ({hoy:viewHoy, carreras:viewCarreras, modelo:viewModelo, coach:viewCoach, analisis:viewAnalisis, actividades:viewActividades, plan:viewPlan, bienestar:viewBienestar})[v](state.data);
   else if(!state.error) html += `<section class="card"><p class="note">Cargando datos de Intervals…</p></section>`;
   $("#main").innerHTML = html;
   bindAjustes();
   const rd = $("#rundaily"); if(rd) rd.addEventListener("click", doDaily);
   const rw = $("#runweek"); if(rw) rw.addEventListener("click", doWeek);
+  bindRaces();
+  const hf = $("#home-find"); if(hf) hf.addEventListener("click", async () => {
+    const q = $("#home-q").value.trim(); if(!q) return;
+    try{ state.homeResults = await geocode(q); state.homeMsg = null }catch(e){ state.homeMsg = e.message }
+    render();
+  });
   const sw = $("#sendweek"); if(sw) sw.addEventListener("click", sendWeek);
   const ra = $("#runact"); if(ra) ra.addEventListener("click", doActivity);
   document.querySelectorAll(".nav").forEach(b => { if(v==="analisis" && b.dataset.view==="actividades") b.setAttribute("aria-current","page") });
@@ -1044,8 +1320,10 @@ async function refresh(){
       try{ const c = JSON.parse(store.get("cache")||"null"); if(c){ state.data = c.data; state.error += ` Se muestran los últimos datos guardados (${new Date(c.at).toLocaleString("es-AR")}).` } }catch(_){} }
   }
   try{ state.model = state.data ? fitModel(state.data) : null }catch(e){ state.model = null }
+  if(state.data && !state.demo) mergeRaceEvents(state.data);
   $("#main").classList.remove("loading");
   render();
+  loadWeather().then(render); loadRaceWeather();
 }
 function bindAjustes(){
   const f = $("#cfg"); if(!f) return;
@@ -1069,7 +1347,7 @@ function bindAjustes(){
     msg.className = aiCfg().key ? "msg ok" : "msg bad";
     msg.textContent = aiCfg().key ? "Coach guardado. Ya podés pedir la revisión en Coach." : "Guardé el contexto, pero falta la clave de Claude.";
   });
-  const BK = ["coach.notes","coach.rejected","coach.history","coach.week","aictx"];
+  const BK = ["coach.notes","coach.rejected","coach.history","coach.week","aictx","week.std","week.override","races","place.home"];
   $("#bkcopy").addEventListener("click", () => {
     const data = {}; BK.forEach(k => { const v = store.get(k); if(v!=null) data[k] = v });
     const txt = JSON.stringify(data), msg = $("#bkmsg");
@@ -1087,6 +1365,41 @@ function bindAjustes(){
   const fg = $("#forget"); if(fg) fg.addEventListener("click", () => { store.del("key"); store.del("cache"); state.data=null; refresh().then(()=>go("ajustes")) });
 }
 
+function bindRaces(){
+  const rf = $("#raceform"); if(!rf) return;
+  const msg = $("#rc-msg"), say = (t, ok) => { msg.className = "msg " + (ok ? "ok" : "bad"); msg.textContent = t };
+  rf.addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const v = id => ($(id)?.value || "").trim();
+    const f = { name: v("#rc-name"), date: v("#rc-date"), tipo: v("#rc-tipo"), prioridad: v("#rc-prio"), km: v("#rc-km").replace(",", "."),
+      desnivel: v("#rc-elev"), objetivo: v("#rc-obj"), posicion: v("#rc-pos"), comentario: v("#rc-com") };
+    if(!f.name || !f.date){ say("Faltan el nombre o la fecha."); return }
+    const btn = $("#rc-save"); btn.disabled = true; btn.textContent = "Guardando…";
+    try{
+      await saveRace(f);
+      state.raceMsg = { ok:true, t: state.demo ? "Guardada en la app. En modo ejemplo no se carga en Intervals." : "Guardada en la app y en el calendario de Intervals." };
+      state.raceEdit = null; state.racePlace = null; render(); loadRaceWeather();
+    }catch(e){ say(e.message); btn.disabled = false; btn.textContent = "Guardar carrera" }
+  });
+  $("#rc-find").addEventListener("click", async () => {
+    const q = $("#rc-place").value.trim(), box = $("#rc-picks"); if(!q) return;
+    box.innerHTML = `<p class="note">Buscando…</p>`;
+    try{
+      state.placeResults = await geocode(q);
+      box.innerHTML = state.placeResults.length ? state.placeResults.map((p,i) => `<button type="button" class="pick" data-pick="${i}">${esc(p.name)}</button>`).join("")
+        : `<p class="note">No encontré ese lugar. Probá con el nombre de la ciudad más cercana.</p>`;
+    }catch(e){ box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>` }
+  });
+  const cancel = $("#rc-cancel"); if(cancel) cancel.addEventListener("click", () => { state.raceEdit = null; state.racePlace = null; state.raceMsg = null; render() });
+  const del = $("#rc-del"); if(del) del.addEventListener("click", () => {
+    if(del.dataset.confirm !== "1"){ del.dataset.confirm = "1"; del.textContent = "Tocá de nuevo para borrar"; return }
+    const gone = races().find(r => r.id === state.raceEdit);
+    if(gone?.eventId) cacheSet("races.hidden", [...(cacheGet("races.hidden")||[]), String(gone.eventId)]);
+    cacheSet("races", races().filter(r => r.id !== state.raceEdit));
+    state.raceEdit = null; state.racePlace = null; state.raceMsg = { ok:true, t:"Carrera borrada de la app. Si estaba en Intervals, borrala también desde su calendario." }; render();
+  });
+}
+
 /* Sidebar colapsable */
 const side = $("#side"), scrim = $("#scrim"), wide = () => matchMedia("(min-width:900px)").matches;
 function closeSide(){ if(!wide()){ side.classList.remove("open"); scrim.hidden = true } }
@@ -1098,6 +1411,12 @@ scrim.addEventListener("click", closeSide);
 document.querySelectorAll(".nav").forEach(b => b.addEventListener("click", () => go(b.dataset.view)));
 document.addEventListener("click", e => {
   const g = e.target.closest("[data-go]"); if(g){ e.preventDefault(); go(g.dataset.go); return }
+  const pk = e.target.closest("[data-pick]");
+  if(pk){ const p = state.placeResults?.[+pk.dataset.pick]; if(p){ state.racePlace = p; $("#rc-place").value = p.name; $("#rc-chosen").textContent = "Lugar elegido: " + p.name; $("#rc-picks").innerHTML = "" } return }
+  const hm = e.target.closest("[data-home]");
+  if(hm){ const p = state.homeResults?.[+hm.dataset.home]; if(p){ cacheSet("place.home", p); state.homeResults = null; state.wx = null; render(); loadWeather().then(render) } return }
+  const re = e.target.closest("[data-race-edit]");
+  if(re){ state.raceEdit = re.dataset.raceEdit; state.racePlace = null; state.raceMsg = null; render(); window.scrollTo(0,0); return }
   const rj = e.target.closest("[data-reject]");
   if(rj){ const ns = notes(), i = +rj.dataset.reject; cacheSet("coach.rejected", [...rejected(), ns[i]].slice(-20)); ns.splice(i,1); cacheSet("coach.notes", ns); render(); return }
   const rp = e.target.closest("[data-rpe]"); if(rp){ saveRpe(rp.dataset.act, +rp.dataset.rpe); return }
@@ -1105,6 +1424,16 @@ document.addEventListener("click", e => {
   const an = e.target.closest("[data-analyze]"); if(an){ state.actId = an.dataset.analyze; state.aiError=null; go("analisis") }
 });
 $("#refresh").addEventListener("click", refresh);
+document.addEventListener("change", e => {
+  const av = e.target.closest("[data-avail]");
+  if(av){ const f = av.dataset.avail, o = overrides(), today = iso(new Date());
+    if(av.value === stdWeek()[dowOf(f)]) delete o[f]; else o[f] = av.value;
+    Object.keys(o).forEach(k => { if(k < today) delete o[k] });
+    cacheSet("week.override", o); render(); return }
+  const sd = e.target.closest("[data-std]");
+  if(sd){ const s = cacheGet("week.std") || {}; s[sd.dataset.std] = sd.value; cacheSet("week.std", s) }
+});
+document.addEventListener("input", e => { if(e.target.id === "weeknote") store.set(noteKey(), e.target.value) });
 if(store.get("collapsed")==="1") document.body.classList.add("collapsed");
 
 render(); refresh();

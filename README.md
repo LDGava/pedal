@@ -6,12 +6,14 @@ App web para el celular conectada a Intervals.icu, con un coach de IA (Claude) q
 
 1. Abrir la app desde su dirección de GitHub Pages en el celular y elegir "Agregar a pantalla de inicio".
 2. En **Ajustes**, cargar el ID de atleta y la clave de API de Intervals (Settings → Developer Settings).
-3. En **Ajustes → Coach con IA**, cargar la clave de la API de Anthropic (platform.claude.com → Settings → API keys) y el contexto del atleta: objetivo, carreras, horas por semana, días disponibles y lesiones.
+3. En **Ajustes**, completar la **semana estándar** (bici, gimnasio, clase con profe en modo recepción, libre o descanso para cada día) y **dónde entrena** (para el clima).
+4. En **Ajustes → Coach con IA**, cargar la clave de la API de Anthropic (platform.claude.com → Settings → API keys) y el contexto del atleta: objetivo, carreras, horas por semana, días disponibles y lesiones.
 
 ## Secciones
 
-- **Hoy:** forma, fitness, fatiga, carga semanal y resumen del coach.
+- **Hoy:** forma, fitness, fatiga, carga semanal, resumen del coach, próxima carrera y pronóstico del clima.
 - **Modelo:** modelo de rendimiento de Banister ajustado a los datos del atleta (constantes propias de fitness y fatiga), validado contra el estándar 42/7 y usado por el coach cuando predice mejor.
+- **Carreras:** registro con tipo, lugar, distancia, desnivel y prioridad (se carga en Intervals como RACE A/B/C); suma el clima del lugar y arma el historial por tipo con forma de llegada, carga previa y resultado.
 - **Coach:** plan de martes a lunes (se arma los lunes), revisión diaria con ajustes, envío al Garmin vía el calendario de Intervals, aprendizajes del atleta e historial plan contra real.
 - **Actividades:** últimas 8 semanas con análisis por sesión.
 - **Plan:** calendario de Intervals de los próximos 14 días.
