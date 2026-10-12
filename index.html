@@ -219,7 +219,7 @@ pre.wo{margin:8px 0 0;padding:10px;border-radius:8px;background:var(--bg);border
 <script>
 (() => {
 "use strict";
-const APP_VERSION = "0.0.10";
+const APP_VERSION = "0.0.11";
 const API = "https://intervals.icu/api/v1";
 const store = {
   get(k){ try{ return localStorage.getItem("pedal."+k) }catch(e){ return null } },
@@ -451,7 +451,7 @@ Reglas:
 - Cada afirmación se apoya en un dato concreto del contexto (fecha y número). Si falta un dato, lo decís; no inventás.
 - Ante señales que pueden ser de salud (FC en reposo muy alta varios días, HRV que se desploma), recomendás descanso y consulta médica, sin diagnosticar.
 - Español rioplatense, directo y concreto, sin relleno.
-- Entregás el resultado con la herramienta entregar_resultado, con exactamente la estructura JSON pedida.`;
+- Entregás el resultado SIEMPRE llamando a la herramienta entregar_resultado, con exactamente la estructura JSON pedida y sin texto aparte. Si no pudieras usar la herramienta, respondé solo con ese JSON.`;
 
 /* Claude devuelve el resultado como entrada de una herramienta obligatoria: llega como objeto ya armado, sin texto que parsear */
 const OUT_TOOL = { name: "entregar_resultado", description: "Entrega el resultado con exactamente la estructura JSON pedida en el mensaje.", input_schema: { type: "object", additionalProperties: true } };
@@ -477,15 +477,24 @@ async function askClaude(user, progressId, maxTokens = 16000){
   const secs = () => Math.round((Date.now()-t0)/1000);
   const detail = (extra) => ` [${model} · ${secs()} s${extra ? " · " + extra : ""} · v${APP_VERSION}]`;
   const show = t => { const b = progressId && document.getElementById(progressId); if(b) b.textContent = t };
-  let r;
-  try{
-    show("Conectando con Claude…");
-    r = await fetch(AI_URL, { method:"POST", signal: ctl.signal, headers:{
-      "content-type":"application/json", "x-api-key":key, "anthropic-version":"2023-06-01",
-      "anthropic-dangerous-direct-browser-access":"true" },
-      body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, system: COACH_SYS, messages:[{role:"user", content:user}],
-        tools: [OUT_TOOL], tool_choice: { type: "tool", name: OUT_TOOL.name } }) });
-  }catch(e){ clearTimeout(timer); throw new Error((e.name==="AbortError" ? "Claude tardó más de 6 minutos." : "No se pudo llegar a Claude. Revisá la conexión a internet.") + detail()) }
+  /* Algunos modelos no aceptan la entrega obligatoria por herramienta: se reintenta con elección libre y se recuerda para ese modelo */
+  const modeKey = "ai.toolmode." + model;
+  let mode = store.get(modeKey) || "tool", r;
+  for(let attempt = 0; attempt < 2; attempt++){
+    try{
+      show("Conectando con Claude…");
+      r = await fetch(AI_URL, { method:"POST", signal: ctl.signal, headers:{
+        "content-type":"application/json", "x-api-key":key, "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-access":"true" },
+        body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, system: COACH_SYS, messages:[{role:"user", content:user}],
+          tools: [OUT_TOOL], tool_choice: mode === "tool" ? { type: "tool", name: OUT_TOOL.name } : { type: "auto" } }) });
+    }catch(e){ clearTimeout(timer); throw new Error((e.name==="AbortError" ? "Claude tardó más de 6 minutos." : "No se pudo llegar a Claude. Revisá la conexión a internet.") + detail()) }
+    if(r.status === 400 && mode === "tool"){
+      const j = await r.clone().json().catch(() => null);
+      if(/tool_choice/i.test(j?.error?.message || "")){ mode = "auto"; store.set(modeKey, "auto"); continue }
+    }
+    break;
+  }
   if(!r.ok){
     clearTimeout(timer);
     const j = await r.json().catch(() => null), m = j?.error?.message || "error desconocido";
