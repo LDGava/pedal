@@ -102,6 +102,7 @@ main{padding-inline:16px;padding-block:16px calc(env(safe-area-inset-bottom,0px)
 .list{display:flex;flex-direction:column}
 .row{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
 .row:first-child{border-top:0;padding-top:0}
+.row.same{border-top:1px dashed var(--line)}
 .date{text-align:center;font:600 11px var(--mono);color:var(--muted);text-transform:uppercase;line-height:1.2}
 .date b{display:block;font:700 22px/1 var(--display);color:var(--fg)}
 .row .t{min-width:0}
@@ -154,7 +155,17 @@ textarea{min-height:110px;resize:vertical}
 .rpe-ends{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--muted);margin-top:4px}
 .avail{display:grid;grid-template-columns:44px 1fr;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
 .avail:first-child{border-top:0}
-.avail select{padding:10px}
+.avail{align-items:start}
+.opts{display:flex;flex-direction:column;gap:4px}
+.opt{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;padding:5px 10px;min-height:42px;border:1px solid var(--line);border-radius:10px;min-width:0}
+.opt.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.opt label{display:flex;align-items:center;gap:10px;margin:0;padding:6px 0;font:500 14px/1.2 var(--body);text-transform:none;letter-spacing:0;color:var(--fg);flex:1 1 0;min-width:0;cursor:pointer}
+.opt input[type=checkbox]{width:18px;height:18px;flex:none;accent-color:var(--accent)}
+.hrs{display:inline-flex;align-items:center;gap:4px;font:12px var(--mono);color:var(--muted)}
+.hrs input{width:54px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font:14px var(--mono);color:inherit}
+.est{display:block;font:11px/1.3 var(--mono);color:var(--muted);flex:1 1 100%;padding:0 0 4px 28px}
+.est.rest{padding-left:0}
+.est.rest{margin-top:6px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .two>div{min-width:0}
 input[type=date]{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font:15px var(--mono);color:inherit;min-height:46px}
@@ -251,7 +262,7 @@ async function api(path, params, opts){
   }
   if(r.status===401||r.status===403) throw new Error("Intervals rechazó la clave o el ID de atleta. Revisá ambos en Ajustes (el ID lleva la i adelante, por ejemplo i30352, o 0 para el dueño de la clave).");
   if(!r.ok) throw new Error(`Intervals respondió ${r.status}. Probá de nuevo en un rato.`);
-  return r.json();
+  const txt = await r.text(); return txt ? JSON.parse(txt) : null;
 }
 async function loadLive(){
   const today = new Date();
@@ -329,7 +340,7 @@ function plannedLoads(D){
   const today = iso(new Date()), map = {};
   D.events.forEach(e => { if(e.date > today && e.load) map[e.date] = (map[e.date]||0) + e.load });
   const wk = cacheGet("coach.week");
-  if(wk) wk.r.dias.forEach(d => { if(d.fecha > today) map[d.fecha] = d.load || 0 });
+  if(wk){ const plan = {}; wk.r.dias.forEach(d => { if(d.fecha > today) plan[d.fecha] = (plan[d.fecha]||0) + (d.load||0) }); Object.assign(map, plan) }
   return map;
 }
 function dailyLoads(D, extra){
@@ -468,21 +479,29 @@ function compactData(D, days){
 }
 const r1 = v => v==null || isNaN(v) ? undefined : Math.round(v*10)/10;
 
-/* ---- Disponibilidad: semana estándar + cambios de esta semana ---- */
-const MODES = [
-  ["bici","Bici: plan del coach"],
-  ["gym_bici","Gimnasio + bici"],
-  ["gym","Gimnasio"],
-  ["clase","Clase con profe (recepción)"],
-  ["libre","Libre: decide el coach"],
-  ["descanso","Descanso"]
+/* ---- Disponibilidad: cada día combina gimnasio, bici libre y bici con Pedal Coach, cada uno con sus horas ---- */
+const OPTS = [
+  ["gym",   "Gimnasio",              "El coach arma la rutina para ese tiempo", 1],
+  ["libre", "Bici libre",            "Salís por tu cuenta o con el profe: el coach estima la carga con tu historial", 2],
+  ["coach", "Bici con Pedal Coach",  "El coach arma el entrenamiento y lo manda al Garmin", 1.5],
+  ["race",  "Carrera",               "Competencia: el coach estima la carga y prepara los días previos", 3]
 ];
-const MODE_LABEL = Object.fromEntries(MODES);
-const DEFAULT_STD = {1:"gym", 2:"bici", 3:"gym", 4:"bici", 5:"gym", 6:"bici", 0:"libre"};
-const stdWeek = () => ({ ...DEFAULT_STD, ...(cacheGet("week.std")||{}) });
-const overrides = () => cacheGet("week.override") || {};
+const DEFAULT_STD = { 1:{gym:1}, 2:{coach:1.5}, 3:{gym:1}, 4:{coach:1.5}, 5:{gym:1}, 6:{coach:3}, 0:{} };
+/* Convierte la configuración vieja (un modo por día) al formato nuevo */
+const LEGACY = { bici:{coach:1.5}, gym_bici:{gym:1, coach:1}, gym:{gym:1}, clase:{libre:1.5}, libre:{coach:1.5}, descanso:{} };
+const toCfg = v => typeof v === "string" ? { ...(LEGACY[v]||{}) } : (v || {});
+function stdWeek(){ const s = cacheGet("week.std") || {}, out = {}; for(const k of [0,1,2,3,4,5,6]) out[k] = k in s ? toCfg(s[k]) : { ...DEFAULT_STD[k] }; return out }
+function overrides(){ const o = cacheGet("week.override") || {}, out = {}; Object.entries(o).forEach(([k,v]) => out[k] = toCfg(v)); return out }
 const dowOf = f => new Date(f+"T12:00:00").getDay();
-function modeOf(f){ return overrides()[f] || stdWeek()[dowOf(f)] }
+/* Si hay una carrera registrada ese día y no se cambió a mano, el día se marca como carrera */
+function dayCfg(f){
+  const o = overrides(); if(o[f]) return o[f];
+  const c = { ...stdWeek()[dowOf(f)] }, r = races().find(x => x.date===f);
+  if(r){ delete c.coach; delete c.libre; c.race = r.km ? Math.max(1, Math.round(r.km/28*2)/2) : 3 }
+  return c;
+}
+const cfgKey = c => JSON.stringify(OPTS.map(([k]) => c[k] ?? null));
+const modeOf = f => cfgKey(dayCfg(f));
 function weekDates(){
   const today = iso(new Date()), wk = cacheGet("coach.week");
   let s, e; const c = customRange();
@@ -493,28 +512,41 @@ function weekDates(){
   return out;
 }
 function median(a){ if(!a.length) return null; const s = [...a].sort((x,y)=>x-y), m = Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2 }
-/* Carga estimada de un día en recepción: primero los días marcados así en el historial; si no alcanzan, el mismo día de la semana en las últimas 8 semanas */
-function estimateFor(mode, f, D){
-  const tipo = mode==="clase" ? "Clase" : "WeightTraining";
-  let rows = (cacheGet("coach.history")||[]).flatMap(h => h.dias).filter(d => d.plan_tipo===tipo && d.real_load > 0)
-    .map(d => ({ load:d.real_load, min:d.real_min, rpe:d.rpe }));
-  let fuente = `historial de días marcados como ${mode==="clase" ? "clase" : "gimnasio"}`;
-  if(rows.length < 2){
-    const since = iso(addDays(new Date(), -56)), wd = dowOf(f), by = {};
-    (D.allActivities||D.activities).filter(a => a.date >= since && dowOf(a.date)===wd && (mode!=="gym" || a.type==="WeightTraining"))
-      .forEach(a => { const x = (by[a.date] ||= {load:0, min:0, rpe:[]}); x.load += a.load||0; x.min += (a.time||0)/60; if(a.rpe) x.rpe.push(a.rpe) });
-    rows = Object.values(by).map(x => ({ load:x.load, min:x.min, rpe: x.rpe.length ? Math.max(...x.rpe) : null }));
-    fuente = `mismo día de la semana, últimas 8 semanas`;
+/* Carga por hora de su historia: bici libre (días que fueron solo bici libre; si no alcanzan, todas sus salidas de bici) y gimnasio */
+function perHour(kind, D){
+  const since = iso(addDays(new Date(), -56));
+  let rows = [], fuente;
+  if(kind==="libre"){
+    rows = (cacheGet("coach.history")||[]).flatMap(h => h.dias).filter(d => d.plan_tipo==="BiciLibre" && d.real_load > 0 && d.real_min > 20)
+      .map(d => ({ lph: d.real_load/(d.real_min/60), rpe: d.rpe }));
+    fuente = "días de bici libre registrados";
+    if(rows.length < 3){ rows = (D.allActivities||D.activities).filter(a => a.date >= since && BIKE(a.type) && a.load && (a.time||0) >= 1800)
+      .map(a => ({ lph: a.load/(a.time/3600), rpe: a.rpe })); fuente = "sus salidas de bici de las últimas 8 semanas" }
+  } else if(kind==="race"){
+    rows = races().filter(r => r.date < iso(new Date())).map(r => raceStats(r, D).actividad).filter(a => a && a.load && a.min >= 20)
+      .map(a => ({ lph: a.load/(a.min/60), rpe: a.rpe }));
+    fuente = "sus carreras anteriores";
+    if(rows.length < 2){ const l = perHour("libre", D); if(!l) return null;
+      return { carga_por_hora: Math.round(l.carga_por_hora*1.3), rpe: 8, sesiones: l.sesiones, fuente: "sus salidas de bici × 1,3 (todavía sin carreras con datos)" } }
+  } else {
+    rows = (D.allActivities||D.activities).filter(a => a.date >= since && /Weight|Strength/i.test(a.type||"") && a.load && (a.time||0) >= 900)
+      .map(a => ({ lph: a.load/(a.time/3600), rpe: a.rpe })); fuente = "sus gimnasios de las últimas 8 semanas";
   }
   if(!rows.length) return null;
   const rp = rows.map(r => r.rpe).filter(Boolean);
-  return { load: Math.round(median(rows.map(r=>r.load))), min: Math.round(median(rows.map(r=>r.min))), rpe: rp.length ? median(rp) : null, sesiones: rows.length, fuente };
+  return { carga_por_hora: Math.round(median(rows.map(r => r.lph))), rpe: rp.length ? median(rp) : null, sesiones: rows.length, fuente };
 }
 function availability(D){
-  const o = overrides();
-  return weekDates().map(f => { const modo = modeOf(f);
-    const est = modo==="clase" ? estimateFor("clase", f, D) : (modo==="gym" || modo==="gym_bici") ? estimateFor("gym", f, D) : null;
-    return { fecha:f, dia:DOW[dowOf(f)], modo, cambiado_esta_semana: !!o[f], estimado: est || undefined };
+  const o = overrides(), lib = perHour("libre", D), gym = perHour("gym", D), rac = perHour("race", D);
+  return weekDates().map(f => { const c = dayCfg(f);
+    const x = { fecha:f, dia:DOW[dowOf(f)], gimnasio_h: c.gym, bici_libre_h: c.libre, bici_coach_h: c.coach, carrera_h: c.race,
+      descanso: !c.gym && !c.libre && !c.coach && !c.race, cambiado_esta_semana: !!o[f] };
+    if(c.race){ const r = races().find(z => z.date===f);
+      x.estimado_carrera = rac ? { load: Math.round(rac.carga_por_hora * c.race), rpe: rac.rpe, carga_por_hora: rac.carga_por_hora, fuente: rac.fuente } : "sin historial: estimalo vos";
+      if(r) x.carrera_registrada = { nombre: r.name, tipo: r.tipo, prioridad: r.prioridad, km: r.km, desnivel_m: r.desnivel, lugar: r.lugar?.name } }
+    if(c.libre) x.estimado_bici_libre = lib ? { load: Math.round(lib.carga_por_hora * c.libre), rpe: lib.rpe, carga_por_hora: lib.carga_por_hora, fuente: lib.fuente } : "sin historial: estimalo vos";
+    if(c.gym) x.referencia_gimnasio = gym || "sin historial de gimnasio grabado";
+    return x;
   });
 }
 const noteKey = () => "week.note." + weekDates().slice(-1)[0];
@@ -605,13 +637,13 @@ async function saveRace(form){
   cacheSet("races", list);
 }
 
-const AVAIL_RULES = `Reglas por modo de disponibilidad (la disponibilidad manda sobre cualquier otra regla y sobre lo que haya en el calendario de Intervals):
-- bici: sesión de bici planificada por vos, con workout.
-- gym_bici: gimnasio y además bici el mismo día. Un solo registro: tipo Ride, sesion "Gimnasio + …", load = carga de gimnasio estimada + bici, workout solo de la parte de bici, y la bici compatible con el gimnasio (sin calidad si es de piernas).
-- gym: tipo WeightTraining, sesion "Gimnasio", no estructures su contenido, load = estimado.load (o tu estimación si no hay), workout vacío.
-- clase: MODO RECEPCIÓN. El contenido lo decide un profesor y cambia cada vez. tipo "Clase", sesion "Clase con profesor", no planifiques su contenido, load = estimado.load y rpe_esperado = estimado.rpe (o tu estimación si no hay), workout vacío. Planificá el resto de la semana asumiendo esa carga y evitá calidad en bici el día anterior si su RPE habitual es alto.
-- libre: decidí vos entre bici, recuperación o descanso.
-- descanso: tipo Descanso, load 0.`;
+const AVAIL_RULES = `Disponibilidad (manda sobre cualquier otra regla y sobre lo que haya en el calendario de Intervals). Cada día puede combinar tres cosas, cada una con las horas que el atleta tiene:
+- gimnasio_h: vos das la rutina. Una sesión tipo WeightTraining de hasta esas horas. En "workout" va la rutina: un ejercicio por línea con series × repeticiones, carga orientativa (RPE o % de 1RM) y descanso; las líneas NO empiezan con guion. Ajustala a la bici: nada de piernas pesado el día antes de una sesión de calidad ni el día de una salida larga. "load" estimalo con referencia_gimnasio.carga_por_hora × horas si existe.
+- bici_coach_h: vos das la sesión de bici. Una sesión tipo Ride (o VirtualRide si el clima obliga a rodillo) que no supere esas horas, con workout en sintaxis de intervals. Puede ser más corta si conviene.
+- bici_libre_h: MODO RECEPCIÓN. Sale por su cuenta o con un profesor y el contenido no lo decidís vos. Una sesión tipo "BiciLibre", sesion "Bici libre", min = horas × 60, load y rpe_esperado = estimado_bici_libre (o tu estimación si no hay), workout vacío. Planificá el resto contando esa carga; cuando se haga, se usa la real.
+- carrera_h: competencia. Una sesión tipo "Carrera", sesion con el nombre de la carrera si está registrada, min = horas × 60, load y rpe_esperado = estimado_carrera, workout vacío. No la planifiques: prepará los días previos (descarga y activación según su prioridad y su modelo personal si está validado) y poné recuperación el día siguiente.
+- descanso: si no tiene nada marcado, un único registro tipo Descanso con load 0.
+Un día con varias cosas lleva un registro por sesión, todos con la misma fecha.`;
 
 /* Semana de entrenamiento: se planifica el lunes, de martes a lunes */
 /* Fuera del lunes, arranca hoy salvo que ya sea tarde (17 h) o ya haya entrenado; el atleta puede elegir. Termina el primer lunes posterior al arranque. */
@@ -651,8 +683,8 @@ Bloque principal 3x
 
 Vuelta a la calma
 - 10m 50%
-Para gimnasio, descanso u otras actividades, "workout" va vacío.`;
-const DIA_SHAPE = `{"fecha":"YYYY-MM-DD","tipo":"Ride|VirtualRide|WeightTraining|Clase|Run|Descanso","sesion":"nombre corto","detalle":"objetivo de la sesión en una línea","min":0,"load":0,"rpe_esperado":0,"workout":"texto en sintaxis intervals o vacío"}`;
+Para bici libre, carrera y descanso, "workout" va vacío; para gimnasio va la rutina como se indica en las reglas de disponibilidad.`;
+const DIA_SHAPE = `{"fecha":"YYYY-MM-DD","tipo":"Ride|VirtualRide|WeightTraining|BiciLibre|Carrera|Descanso","sesion":"nombre corto","detalle":"objetivo de la sesión en una línea","min":0,"load":0,"rpe_esperado":0,"workout":"texto en sintaxis intervals o vacío"}`;
 /* ---- Memoria del coach: plan vs real, aprendizajes y 52 semanas ---- */
 const sum = (arr, f) => arr.reduce((t,x) => t + (f(x)||0), 0);
 function mondayOf(dateStr){ const d = new Date(dateStr+"T12:00:00"); return iso(addDays(d, -((d.getDay()+6)%7))) }
@@ -669,11 +701,14 @@ function yearWeeks(D){
 function archiveWeek(D){
   const wk = cacheGet("coach.week"); if(!wk) return;
   const today = iso(new Date());
-  const dias = wk.r.dias.filter(d => d.fecha < today).map(d => {
-    const acts = (D.allActivities||D.activities).filter(a => a.date===d.fecha), rpes = acts.map(a=>a.rpe).filter(Boolean);
-    return { fecha:d.fecha, plan:d.sesion, plan_tipo:d.tipo, plan_load:d.load||0, plan_min:d.min||0, rpe_esperado:d.rpe_esperado,
+  const fechas = [...new Set(wk.r.dias.map(d => d.fecha))].filter(f => f < today);
+  const dias = fechas.map(f => {
+    const ps = wk.r.dias.filter(d => d.fecha === f), exp = ps.map(p => p.rpe_esperado).filter(Boolean);
+    const acts = (D.allActivities||D.activities).filter(a => a.date===f), rpes = acts.map(a=>a.rpe).filter(Boolean);
+    return { fecha:f, plan: ps.map(p => p.sesion).join(" + "), plan_tipo: ps.map(p => p.tipo).join("+"), plan_load: Math.round(sum(ps, p => p.load)),
+      plan_min: Math.round(sum(ps, p => p.min)), rpe_esperado: exp.length ? Math.max(...exp) : undefined,
       real: acts.map(a=>a.name).join(" + ") || null, real_load: Math.round(sum(acts, a=>a.load)), real_min: Math.round(sum(acts, a=>a.time)/60),
-      rpe: rpes.length ? Math.max(...rpes) : null, ajustado: !!d.ajustado };
+      rpe: rpes.length ? Math.max(...rpes) : null, ajustado: ps.some(p => p.ajustado) };
   });
   if(!dias.length) return;
   const hist = (cacheGet("coach.history")||[]).filter(h => h.inicio !== wk.r.dias[0].fecha);
@@ -710,7 +745,7 @@ async function runWeek(){
   const D = state.data, {ctx} = aiCfg(), wd = weekDates(), wr = { start: wd[0], end: wd[wd.length-1] };
   const prompt = `${header(D, ctx)}
 
-Planificá el período del ${wr.start} al ${wr.end}: ${wd.length} días, un registro por día, también los de descanso. Si el período es más largo que una semana, "carga_semana_objetivo" es la carga por cada 7 días y la progresión entre semanas tiene que ser coherente con la rampa y las carreras.
+Planificá el período del ${wr.start} al ${wr.end}: ${wd.length} días. "dias" es la lista de sesiones: un registro por sesión (un día con gimnasio y bici lleva dos) y un registro tipo Descanso para los días sin nada. Si el período es más largo que una semana, "carga_semana_objetivo" es la carga por cada 7 días y la progresión entre semanas tiene que ser coherente con la rampa y las carreras.
 Disponibilidad de la semana: ${JSON.stringify(availability(D))}
 Nota del atleta para esta semana: ${weekNote() || "ninguna"}
 ${AVAIL_RULES}
@@ -732,12 +767,13 @@ async function runDaily(){
   const prompt = `${header(D, ctx)}
 
 Plan de la semana vigente: ${plan ? JSON.stringify(plan) : "no hay plan semanal todavía"}.
-Disponibilidad vigente de los días que quedan (si difiere del plan, el atleta la cambió después de planificar): ${JSON.stringify(availability(D))}
+Disponibilidad vigente de los días que quedan, con horas (si difiere del plan, el atleta la cambió después de planificar): ${JSON.stringify(availability(D))}
 Nota del atleta para esta semana: ${weekNote() || "ninguna"}
 ${AVAIL_RULES}
 Revisá lo que hizo hasta hoy contra el plan (cumplimiento, carga real y RPE) y decidí:
 1. Si la sesión planificada para hoy es apropiada, hay que ajustarla o conviene descansar.
-2. Si hace falta cambiar días que quedan de la semana. Si una clase o un gimnasio ya se hizo, usá su carga y su RPE reales (no el estimado) para recalcular la bici de los días que quedan. Los días de clase y gimnasio futuros no se replanifican: solo cambian si la disponibilidad cambió. Si la disponibilidad de un día cambió respecto del plan, ese día va en ajustes con su nuevo modo. Solo incluí en "ajustes" los días que cambian, desde hoy en adelante y nunca después del ${plan ? plan[plan.length-1].fecha : iso(addDays(new Date(),6))}.
+2. Si hace falta cambiar días que quedan. Si una bici libre, una carrera o un gimnasio ya se hizo, usá su carga y su RPE reales (no el estimado) para recalcular lo que queda. Las bicis libres y carreras futuras no se replanifican: solo cambian si cambió la disponibilidad. Si la disponibilidad de un día cambió respecto del plan, ese día va en ajustes según la nueva.
+Para cada día que cambia, "ajustes" trae TODAS las sesiones de ese día (reemplazan a las anteriores); un día que pasa a descanso lleva un registro tipo Descanso. Solo incluí en "ajustes" los días que cambian, desde hoy en adelante y nunca después del ${plan ? plan[plan.length-1].fecha : iso(addDays(new Date(),6))}.
 ${WORKOUT_SYNTAX}
 Devolvé exactamente este JSON:
 {"semaforo":"verde|amarillo|rojo","estado":"una frase con el diagnóstico de hoy",
@@ -852,17 +888,36 @@ async function saveRpe(id, n){
 }
 
 /* ---- Coach: semana + revisión diaria ---- */
-const modeSelect = (id, attr, val, cur) => `<select id="${id}" ${attr}="${val}">${MODES.map(([v,l]) => `<option value="${v}" ${cur===v?"selected":""}>${esc(l)}</option>`).join("")}</select>`;
+const fmtH = h => String(h).replace(".", ",");
+/* Editor de un día: casillas combinables, cada una con sus horas; en bici libre y carrera muestra la carga estimada */
+function dayEditor(scope, key, c, D){
+  const est = { libre: D ? perHour("libre", D) : null, race: D ? perHour("race", D) : null };
+  const any = OPTS.some(([k]) => c[k] != null);
+  return `<div class="opts">${OPTS.map(([k, label]) => { const on = c[k] != null, id = `${scope}-${key}-${k}`;
+    const e = on && D && est.hasOwnProperty(k) ? (est[k] ? `Carga estimada: ${Math.round(est[k].carga_por_hora * c[k])}` : "Sin historial para estimar la carga") : "";
+    return `<div class="opt${on ? " on" : ""}"><label for="o-${id}"><input type="checkbox" id="o-${id}" data-opt="${k}" data-scope="${scope}" data-key="${key}" ${on ? "checked" : ""}>${label}</label>
+      ${on ? `<span class="hrs"><input type="text" inputmode="decimal" id="h-${id}" aria-label="Horas de ${label}" data-hrs="${k}" data-scope="${scope}" data-key="${key}" value="${fmtH(c[k])}">h</span>` : ""}
+      ${e ? `<small class="est">${e}</small>` : ""}</div>` }).join("")}</div>
+    ${any ? "" : `<small class="est rest">Descanso</small>`}`;
+}
+function setDay(scope, key, mut){
+  if(scope === "std"){ const s = stdWeek(); mut(s[key]); cacheSet("week.std", s); return }
+  const o = overrides(), today = iso(new Date()), cur = o[key] ? o[key] : { ...dayCfg(key) };
+  mut(cur);
+  if(cfgKey(cur) === cfgKey(stdWeek()[dowOf(key)]) && !races().some(r => r.date === key)) delete o[key]; else o[key] = cur;
+  Object.keys(o).forEach(k => { if(k < today) delete o[k] });
+  cacheSet("week.override", o);
+}
 function viewAvail(D){
   const wk = cacheGet("coach.week"), dates = weekDates(), o = overrides();
   const changed = wk?.modes ? dates.filter(f => wk.modes[f] && wk.modes[f] !== modeOf(f)) : [];
   return `<section class="card"><h2>Disponibilidad · ${shortDate(dates[0])} al ${shortDate(dates[dates.length-1])}</h2>
-    <p class="note">Sale de la semana estándar de Ajustes. Si esta semana algo cambia, cambialo acá antes de planificar o de revisar el día. En "clase con profe" el coach no planifica: estima la carga con la historia de esas clases y, cuando la hacés, recalcula el resto con los datos reales.</p>
+    <p class="note">Sale de la semana estándar de Ajustes. Si esta semana algo cambia, cambialo acá antes de planificar o de revisar el día. Tildá lo que vas a hacer cada día y las horas que tenés. En bici libre y carrera el coach no planifica la sesión: usa la carga estimada y, cuando la hacés, recalcula el resto con los datos reales. Sin nada tildado, es descanso.</p>
     <div class="two"><div><label for="wk-from">Planificar desde</label><input type="date" id="wk-from" min="${iso(new Date())}" value="${dates[0]}"></div>
       <div><label for="wk-to">Hasta</label><input type="date" id="wk-to" min="${iso(new Date())}" value="${dates[dates.length-1]}"></div></div>
     <p class="stamp" id="wk-msg">${customRange() ? `Ventana elegida: ${dates.length} días.` : `Ventana automática: ${new Date().getDay()===1 ? "los lunes, de martes a lunes" : "hasta el próximo lunes"}. Podés elegir otra de hasta ${MAX_DAYS} días.`}</p>
     ${customRange() ? `<button class="mini" type="button" id="wk-auto">Volver a la ventana automática</button>` : ""}
-    <div class="list" style="margin-top:8px">${dates.map(f => `<div class="avail">${dateCell(f)}<div>${modeSelect("av-"+f, "data-avail", f, modeOf(f))}${o[f] ? `<span class="chip" style="color:var(--warn);margin-top:6px">Cambiado esta semana</span>` : ""}</div></div>`).join("")}</div>
+    <div class="list" style="margin-top:8px">${dates.map(f => `<div class="avail">${dateCell(f)}<div style="min-width:0">${dayEditor("wk", f, dayCfg(f), D)}${o[f] ? `<span class="chip" style="color:var(--warn);margin-top:6px">Cambiado esta semana</span>` : ""}</div></div>`).join("")}</div>
     <label for="weeknote">Algo más para esta semana</label>
     <textarea id="weeknote" style="min-height:70px" placeholder="Ej.: el jueves viajo; el sábado puedo hasta 4 horas.">${esc(weekNote())}</textarea>
     ${changed.length ? `<p class="msg bad">Cambiaste ${changed.length === 1 ? "un día" : changed.length + " días"} después de planificar. Tocá "Revisar hoy" para que ajuste esos días, o replanificá la semana.</p>` : ""}
@@ -890,7 +945,7 @@ function viewCoach(D){
 
   /* Semana */
   const w = wk?.r;
-  const pendingSend = w ? w.dias.filter(d => BIKE(d.tipo) && d.workout && d.fecha >= today && (!d.eventId || d.dirty)) : [];
+  const pendingSend = w ? w.dias.filter(d => SENDABLE(d) && d.fecha >= today && (!d.eventId || d.dirty)) : [];
   html += `<section class="card"><h2>Semana${w ? ` · ${shortDate(w.dias[0].fecha)} al ${shortDate(w.dias[w.dias.length-1].fecha)}` : ""}</h2>
     ${w ? `<p class="lead" style="margin-top:0">${esc(w.enfoque||"")}</p>
       <div class="block"><h3>Carga objetivo</h3><p><b style="font:600 26px var(--display)">${n0(w.carga_semana_objetivo)}</b></p></div>
@@ -899,24 +954,26 @@ function viewCoach(D){
     : `<p class="note">${isMon ? "Hoy es lunes: planificá de mañana martes al lunes que viene." : "Todavía no hay plan. El día de planificación es el lunes, pero podés armar uno ahora hasta el próximo lunes."}</p>`}
     <div class="btns">
       ${busyBtn("runweek", w && !weekStale ? "Replanificar semana" : "Planificar semana", state.busy==="week")}
-      ${pendingSend.length ? `<button class="btn" id="sendweek" ${state.busy==="send"?"disabled":""}>${state.busy==="send" ? "Mandando…" : `Mandar ${pendingSend.length} al Garmin`}</button>` : ""}
+      ${pendingSend.length || (wk?.orphans||[]).length ? `<button class="btn" id="sendweek" ${state.busy==="send"?"disabled":""}>${state.busy==="send" ? "Mandando…" : pendingSend.length ? `Mandar ${pendingSend.length} al Garmin` : "Actualizar el Garmin"}</button>` : ""}
     </div>
     ${state.aiError==="week" ? `<p class="msg bad">${esc(state.aiErrorMsg)}</p>` : ""}
     ${state.sendMsg ? `<p class="msg ${state.sendMsg.ok?"ok":"bad"}">${esc(state.sendMsg.t)}</p>` : ""}
     ${w && weekStale ? `<p class="stamp">Este plan ya terminó. Planificá la semana nueva.</p>` : ""}
     ${wk ? stamp(wk.at) : ""}</section>`;
   if(w) html += `<section class="card"><h2>Días</h2><div class="list">${w.dias.map((d,i) => {
+      const sameDay = i > 0 && w.dias[i-1].fecha === d.fecha;
       const past = d.fecha < today, isT = d.fecha===today;
       const chips = [
         isT ? `<span class="chip" style="color:var(--accent)">Hoy</span>` : "",
-        d.tipo==="Clase" ? `<span class="chip" style="color:var(--atl)">Recepción</span>` : "",
+        d.tipo==="BiciLibre" ? `<span class="chip" style="color:var(--atl)">Recepción</span>` : "",
+        d.tipo==="Carrera" ? `<span class="chip" style="color:var(--bad)">Carrera</span>` : "",
         d.ajustado ? `<span class="chip" style="color:var(--warn)">Ajustado</span>` : "",
         d.eventId && !d.dirty ? `<span class="chip" style="color:var(--good)">En Garmin</span>` : "",
         d.eventId && d.dirty ? `<span class="chip" style="color:var(--warn)">Cambio sin mandar</span>` : ""
       ].join("");
-      return `<div class="row" style="${past?"opacity:.55":""}">${dateCell(d.fecha)}<div class="t"><b>${esc(d.sesion)}</b><span style="white-space:normal">${chips}${esc([d.min?fmtDur(d.min*60):"", d.detalle].filter(Boolean).join(" · "))}</span>
+      return `<div class="row${sameDay?" same":""}" style="${past?"opacity:.55":""}">${sameDay ? "<div></div>" : dateCell(d.fecha)}<div class="t"><b>${esc(d.sesion)}</b><span style="white-space:normal">${chips}${esc([d.min?fmtDur(d.min*60):"", d.detalle].filter(Boolean).join(" · "))}</span>
         ${d.motivo ? `<span style="white-space:normal;display:block;color:var(--warn)">${esc(d.motivo)}</span>` : ""}
-        ${d.workout ? `<button class="mini" data-wo="${i}">${state.openWo===i ? "Ocultar estructura" : "Ver estructura"}</button>${state.openWo===i ? `<pre class="wo">${esc(d.workout)}</pre>` : ""}` : ""}</div>
+        ${d.workout ? `<button class="mini" data-wo="${i}">${state.openWo===i ? "Ocultar" : d.tipo==="WeightTraining" ? "Ver rutina" : "Ver estructura"}</button>${state.openWo===i ? `<pre class="wo">${esc(d.workout)}</pre>` : ""}` : ""}</div>
         <div class="load">${d.load?n0(d.load):"—"}<small>CARGA</small></div></div>` }).join("")}</div></section>`;
 
   /* Memoria: aprendizajes y plan vs real */
@@ -952,16 +1009,31 @@ function viewCoach(D){
   }
   return html;
 }
+/* Sesiones que van al calendario de Intervals (y de ahí al Garmin): bici estructurada y rutinas de gimnasio */
+const SENDABLE = d => (BIKE(d.tipo) || d.tipo === "WeightTraining") && d.workout;
+const kindOf = t => BIKE(t) ? "bike" : t;
+/* Reemplaza las sesiones de una fecha conservando el evento de Intervals de cada tipo; los que sobran quedan para borrar */
+function replaceDay(wk, fecha, news, mark){
+  const prev = wk.r.dias.filter(d => d.fecha === fecha), used = new Set();
+  const fresh = news.map(a => { const p = prev.find((x,i) => !used.has(i) && x.eventId && kindOf(x.tipo) === kindOf(a.tipo) && (used.add(i), true));
+    return { ...a, ...(mark ? { ajustado: true } : {}), eventId: p?.eventId, dirty: !!p?.eventId } });
+  prev.forEach((x,i) => { if(x.eventId && !used.has(i)) (wk.orphans ||= []).push(x.eventId) });
+  wk.r.dias = wk.r.dias.filter(d => d.fecha !== fecha).concat(fresh).sort((p,q) => p.fecha.localeCompare(q.fecha));
+}
 async function doWeek(){
   state.busy="week"; state.aiError=null; state.sendMsg=null; render();
   try{
     archiveWeek(state.data);
     const r = await runWeek();
     if(Array.isArray(r.aprendizajes)) cacheSet("coach.notes", r.aprendizajes.filter(Boolean).slice(0,12));
-    const old = cacheGet("coach.week");
-    (r.dias||[]).forEach(d => { const prev = old?.r.dias.find(x => x.fecha===d.fecha); if(prev?.eventId){ d.eventId = prev.eventId; d.dirty = true } });
-    const modes = {}; (r.dias||[]).forEach(d => modes[d.fecha] = modeOf(d.fecha));
-    cacheSet("coach.week", {at:Date.now(), r, modes});
+    const old = cacheGet("coach.week"), today = iso(new Date());
+    const dias = (r.dias||[]).sort((p,q) => p.fecha.localeCompare(q.fecha));
+    const wk = { at: Date.now(), r: { ...r, dias: [] }, modes: {}, orphans: [] };
+    if(old){ wk.r.dias = old.r.dias.filter(d => d.fecha >= today); wk.orphans = old.orphans || [] }
+    [...new Set([...dias.map(d => d.fecha), ...wk.r.dias.map(d => d.fecha)])].forEach(f => replaceDay(wk, f, dias.filter(d => d.fecha === f), false));
+    wk.r.dias = wk.r.dias.filter(d => dias.some(x => x.fecha === d.fecha));
+    dias.forEach(d => wk.modes[d.fecha] = modeOf(d.fecha));
+    cacheSet("coach.week", wk);
   }catch(e){ state.aiError="week"; state.aiErrorMsg=e.message }
   state.busy=null; try{ state.model = fitModel(state.data) }catch(_){} render();
 }
@@ -969,9 +1041,13 @@ async function sendWeek(){
   const wk = cacheGet("coach.week"); if(!wk) return;
   if(state.demo){ state.sendMsg = {ok:false, t:"En modo ejemplo no se manda nada. Cargá la clave de Intervals en Ajustes."}; render(); return }
   state.busy="send"; state.sendMsg=null; render();
-  const today = iso(new Date()); let ok=0, fail=[];
+  const today = iso(new Date()); let ok=0, fail=[], del=0;
+  for(const id of [...(wk.orphans||[])]){
+    try{ await api(`/events/${id}`, {}, {method:"DELETE"}); del++ }catch(e){ if(!/404/.test(e.message)) { fail.push(`borrar ${id}: ${e.message}`); continue } }
+    wk.orphans = wk.orphans.filter(x => x !== id);
+  }
   for(const d of wk.r.dias){
-    if(!(BIKE(d.tipo) && d.workout && d.fecha >= today && (!d.eventId || d.dirty))) continue;
+    if(!(SENDABLE(d) && d.fecha >= today && (!d.eventId || d.dirty))) continue;
     const body = { category:"WORKOUT", start_date_local:`${d.fecha}T00:00:00`, type:d.tipo, name:d.sesion, description:d.workout };
     try{
       const ev = d.eventId ? await api(`/events/${d.eventId}`, {}, {method:"PUT", body}) : await api("/events", {}, {method:"POST", body});
@@ -979,7 +1055,7 @@ async function sendWeek(){
     }catch(e){ fail.push(`${shortDate(d.fecha)}: ${e.message}`) }
   }
   cacheSet("coach.week", wk);
-  state.sendMsg = fail.length ? {ok:false, t:`Se mandaron ${ok}. Fallaron: ${fail.join(" · ")}`} : {ok:true, t:`Listo: ${ok} entrenamientos en el calendario de Intervals. Se sincronizan con el Garmin en la próxima conexión.`};
+  state.sendMsg = fail.length ? {ok:false, t:`Se mandaron ${ok}. Fallaron: ${fail.join(" · ")}`} : {ok:true, t:`Listo: ${ok} entrenamientos en el calendario de Intervals${del ? ` y ${del} reemplazados borrados` : ""}. Se sincronizan con el Garmin en la próxima conexión.`};
   state.busy=null; await refresh();
 }
 function modelChart(M){
@@ -1117,10 +1193,9 @@ async function doDaily(){
     const r = await runDaily(); cacheSet("coach.daily", {date:iso(new Date()), at:Date.now(), r});
     const wk = cacheGet("coach.week");
     if(wk){
-      (r.ajustes||[]).forEach(a => { const i = wk.r.dias.findIndex(d => d.fecha===a.fecha); if(i<0) return;
-        const prev = wk.r.dias[i];
-        wk.r.dias[i] = { ...a, ajustado:true, eventId: prev.eventId, dirty: !!prev.eventId };
-      });
+      const byDate = {}; (r.ajustes||[]).forEach(a => (byDate[a.fecha] ||= []).push(a));
+      const first = wk.r.dias[0]?.fecha, last = wk.r.dias[wk.r.dias.length-1]?.fecha;
+      Object.entries(byDate).forEach(([f, news]) => { if(f >= iso(new Date()) && f >= first && f <= last) replaceDay(wk, f, news, true) });
       wk.modes = wk.modes || {}; wk.r.dias.forEach(d => { if(d.fecha >= iso(new Date())) wk.modes[d.fecha] = modeOf(d.fecha) });
       cacheSet("coach.week", wk);
     }
@@ -1147,7 +1222,8 @@ function viewHoy(D){
   const ramp = w.length>7 ? last.ctl - w[w.length-8].ctl : null;
   const today = iso(new Date());
   const cc = cacheGet("coach.daily"), cr = cc && cc.date===today ? cc.r : null;
-  const ses = cacheGet("coach.week")?.r.dias.find(d => d.fecha===today);
+  const sesList = (cacheGet("coach.week")?.r.dias || []).filter(d => d.fecha===today && d.tipo !== "Descanso");
+  const ses = sesList.length ? { sesion: sesList.map(d => d.sesion).join(" + "), min: sum(sesList, d => d.min) } : null;
   const [lc, ll] = cr ? (LIGHT[cr.semaforo] || ["--grey","—"]) : [];
   const sesLine = ses ? `<p style="margin:10px 0 0"><b>Plan de hoy:</b> ${esc(ses.sesion)}${ses.min?" · "+fmtDur(ses.min*60):""}</p>` : "";
   const coachCard = !aiCfg().key ? "" : cr
@@ -1252,8 +1328,8 @@ function viewAjustes(){
   </section>
   <section class="card">
     <h2>Semana estándar</h2>
-    <p class="note">Qué hace habitualmente cada día. El coach planifica la bici alrededor. En "clase con profe" no planifica nada: estima la carga con la historia de esas clases y recalcula el resto de la semana cuando se hace.</p>
-    <div class="list" style="margin-top:8px">${[1,2,3,4,5,6,0].map(d => `<div class="avail"><div class="date"><b style="font-size:18px">${DOW[d]}</b></div>${modeSelect("std-"+d, "data-std", d, stdWeek()[d])}</div>`).join("")}</div>
+    <p class="note">Qué hace habitualmente cada día y cuántas horas tiene. Gimnasio y bici con Pedal Coach los arma el coach; bici libre y carrera las estima con su historial. Sin nada tildado, es descanso.</p>
+    <div class="list" style="margin-top:8px">${[1,2,3,4,5,6,0].map(d => `<div class="avail"><div class="date"><b style="font-size:18px">${DOW[d]}</b></div><div style="min-width:0">${dayEditor("std", d, stdWeek()[d], state.data)}</div></div>`).join("")}</div>
     <p class="stamp">Se guarda al cambiarlo.</p>
   </section>
   <section class="card">
@@ -1445,11 +1521,13 @@ document.addEventListener("click", e => {
 });
 $("#refresh").addEventListener("click", refresh);
 document.addEventListener("change", e => {
-  const av = e.target.closest("[data-avail]");
-  if(av){ const f = av.dataset.avail, o = overrides(), today = iso(new Date());
-    if(av.value === stdWeek()[dowOf(f)]) delete o[f]; else o[f] = av.value;
-    Object.keys(o).forEach(k => { if(k < today) delete o[k] });
-    cacheSet("week.override", o); render(); return }
+  const op = e.target.closest("[data-opt]");
+  if(op){ const k = op.dataset.opt, def = OPTS.find(x => x[0]===k)[3];
+    setDay(op.dataset.scope, op.dataset.key, c => { if(op.checked) c[k] = def; else delete c[k] }); render(); return }
+  const hr = e.target.closest("[data-hrs]");
+  if(hr){ const v = parseFloat(hr.value.replace(",", ".")), k = hr.dataset.hrs;
+    if(!(v > 0 && v <= 12)){ hr.value = ""; hr.placeholder = "0,5–12"; return }
+    setDay(hr.dataset.scope, hr.dataset.key, c => { c[k] = Math.round(v*4)/4 }); render(); return }
   if(e.target.id === "wk-from" || e.target.id === "wk-to"){
     const from = $("#wk-from").value, to = $("#wk-to").value, msg = $("#wk-msg"), today = iso(new Date());
     const bad = t => { msg.className = "msg bad"; msg.textContent = t };
@@ -1459,8 +1537,6 @@ document.addEventListener("change", e => {
     const n = Math.round((new Date(to+"T12:00:00") - new Date(from+"T12:00:00"))/864e5) + 1;
     if(n > MAX_DAYS) return bad(`La ventana puede tener hasta ${MAX_DAYS} días; elegiste ${n}.`);
     cacheSet("week.range", { start: from, end: to }); render(); return }
-  const sd = e.target.closest("[data-std]");
-  if(sd){ const s = cacheGet("week.std") || {}; s[sd.dataset.std] = sd.value; cacheSet("week.std", s) }
 });
 document.addEventListener("input", e => { if(e.target.id === "weeknote") store.set(noteKey(), e.target.value) });
 if(store.get("collapsed")==="1") document.body.classList.add("collapsed");
