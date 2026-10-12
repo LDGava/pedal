@@ -214,7 +214,7 @@ const store = {
 };
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const iso = d => d.toISOString().slice(0,10);
+const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; /* fecha local, no UTC */
 const addDays = (d,n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x };
 const DOW = ["dom","lun","mar","mié","jue","vie","sáb"];
 const MES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
@@ -485,8 +485,9 @@ const dowOf = f => new Date(f+"T12:00:00").getDay();
 function modeOf(f){ return overrides()[f] || stdWeek()[dowOf(f)] }
 function weekDates(){
   const today = iso(new Date()), wk = cacheGet("coach.week");
-  let s, e;
-  if(new Date().getDay()!==1 && wk && wk.r.dias[wk.r.dias.length-1].fecha >= today){ s = today; e = wk.r.dias[wk.r.dias.length-1].fecha }
+  let s, e; const c = customRange();
+  if(c){ s = c.start; e = c.end }
+  else if(new Date().getDay()!==1 && wk && wk.r.dias[wk.r.dias.length-1].fecha >= today){ s = today; e = wk.r.dias[wk.r.dias.length-1].fecha }
   else { const wr = weekRange(); s = wr.start; e = wr.end }
   const out = []; for(let d = new Date(s+"T12:00:00"); iso(d) <= e; d = addDays(d,1)) out.push(iso(d));
   return out;
@@ -621,7 +622,15 @@ function startsToday(){
   const trained = (state.data?.allActivities||[]).some(a => a.date===iso(new Date()));
   return new Date().getHours() < 17 && !trained;
 }
+/* Ventana elegida por el atleta (desde/hasta). Vence sola cuando pasa su último día. */
+const MAX_DAYS = 21;
+function customRange(){
+  const r = cacheGet("week.range"), today = iso(new Date());
+  if(!r || r.end < today) return null;
+  return { start: r.start < today ? today : r.start, end: r.end };
+}
 function weekRange(){
+  const c = customRange(); if(c) return c;
   const t = new Date(); t.setHours(12,0,0,0);
   const start = startsToday() ? t : addDays(t,1);
   const toMon = ((1 - start.getDay()) + 7) % 7 || 7;
@@ -701,7 +710,7 @@ async function runWeek(){
   const D = state.data, {ctx} = aiCfg(), wd = weekDates(), wr = { start: wd[0], end: wd[wd.length-1] };
   const prompt = `${header(D, ctx)}
 
-Planificá la semana del ${wr.start} al ${wr.end} (un registro por día, también los de descanso).
+Planificá el período del ${wr.start} al ${wr.end}: ${wd.length} días, un registro por día, también los de descanso. Si el período es más largo que una semana, "carga_semana_objetivo" es la carga por cada 7 días y la progresión entre semanas tiene que ser coherente con la rampa y las carreras.
 Disponibilidad de la semana: ${JSON.stringify(availability(D))}
 Nota del atleta para esta semana: ${weekNote() || "ninguna"}
 ${AVAIL_RULES}
@@ -849,8 +858,10 @@ function viewAvail(D){
   const changed = wk?.modes ? dates.filter(f => wk.modes[f] && wk.modes[f] !== modeOf(f)) : [];
   return `<section class="card"><h2>Disponibilidad · ${shortDate(dates[0])} al ${shortDate(dates[dates.length-1])}</h2>
     <p class="note">Sale de la semana estándar de Ajustes. Si esta semana algo cambia, cambialo acá antes de planificar o de revisar el día. En "clase con profe" el coach no planifica: estima la carga con la historia de esas clases y, cuando la hacés, recalcula el resto con los datos reales.</p>
-    ${new Date().getDay()!==1 && !(wk && wk.r.dias[wk.r.dias.length-1].fecha >= iso(new Date())) ? `<label for="wk-start">El plan arranca</label>
-      <select id="wk-start"><option value="hoy" ${startsToday()?"selected":""}>Hoy</option><option value="manana" ${!startsToday()?"selected":""}>Mañana (${DOW[dowOf(iso(addDays(new Date(),1)))]})</option></select>` : ""}
+    <div class="two"><div><label for="wk-from">Planificar desde</label><input type="date" id="wk-from" min="${iso(new Date())}" value="${dates[0]}"></div>
+      <div><label for="wk-to">Hasta</label><input type="date" id="wk-to" min="${iso(new Date())}" value="${dates[dates.length-1]}"></div></div>
+    <p class="stamp" id="wk-msg">${customRange() ? `Ventana elegida: ${dates.length} días.` : `Ventana automática: ${new Date().getDay()===1 ? "los lunes, de martes a lunes" : "hasta el próximo lunes"}. Podés elegir otra de hasta ${MAX_DAYS} días.`}</p>
+    ${customRange() ? `<button class="mini" type="button" id="wk-auto">Volver a la ventana automática</button>` : ""}
     <div class="list" style="margin-top:8px">${dates.map(f => `<div class="avail">${dateCell(f)}<div>${modeSelect("av-"+f, "data-avail", f, modeOf(f))}${o[f] ? `<span class="chip" style="color:var(--warn);margin-top:6px">Cambiado esta semana</span>` : ""}</div></div>`).join("")}</div>
     <label for="weeknote">Algo más para esta semana</label>
     <textarea id="weeknote" style="min-height:70px" placeholder="Ej.: el jueves viajo; el sábado puedo hasta 4 horas.">${esc(weekNote())}</textarea>
@@ -1426,6 +1437,7 @@ document.addEventListener("click", e => {
   const re = e.target.closest("[data-race-edit]");
   if(re){ state.raceEdit = re.dataset.raceEdit; state.racePlace = null; state.raceMsg = null; render(); window.scrollTo(0,0); return }
   const rj = e.target.closest("[data-reject]");
+  if(e.target.id === "wk-auto"){ store.del("week.range"); render(); return }
   if(rj){ const ns = notes(), i = +rj.dataset.reject; cacheSet("coach.rejected", [...rejected(), ns[i]].slice(-20)); ns.splice(i,1); cacheSet("coach.notes", ns); render(); return }
   const rp = e.target.closest("[data-rpe]"); if(rp){ saveRpe(rp.dataset.act, +rp.dataset.rpe); return }
   const wo = e.target.closest("[data-wo]"); if(wo){ const i=+wo.dataset.wo; state.openWo = state.openWo===i ? null : i; render(); return }
@@ -1438,7 +1450,15 @@ document.addEventListener("change", e => {
     if(av.value === stdWeek()[dowOf(f)]) delete o[f]; else o[f] = av.value;
     Object.keys(o).forEach(k => { if(k < today) delete o[k] });
     cacheSet("week.override", o); render(); return }
-  if(e.target.id === "wk-start"){ store.set(startKey(), e.target.value); render(); return }
+  if(e.target.id === "wk-from" || e.target.id === "wk-to"){
+    const from = $("#wk-from").value, to = $("#wk-to").value, msg = $("#wk-msg"), today = iso(new Date());
+    const bad = t => { msg.className = "msg bad"; msg.textContent = t };
+    if(!from || !to) return bad("Elegí las dos fechas.");
+    if(from < today) return bad("La ventana no puede empezar antes de hoy.");
+    if(to < from) return bad("La fecha final tiene que ser igual o posterior a la inicial.");
+    const n = Math.round((new Date(to+"T12:00:00") - new Date(from+"T12:00:00"))/864e5) + 1;
+    if(n > MAX_DAYS) return bad(`La ventana puede tener hasta ${MAX_DAYS} días; elegiste ${n}.`);
+    cacheSet("week.range", { start: from, end: to }); render(); return }
   const sd = e.target.closest("[data-std]");
   if(sd){ const s = cacheGet("week.std") || {}; s[sd.dataset.std] = sd.value; cacheSet("week.std", s) }
 });
