@@ -219,7 +219,7 @@ pre.wo{margin:8px 0 0;padding:10px;border-radius:8px;background:var(--bg);border
 <script>
 (() => {
 "use strict";
-const APP_VERSION = "0.0.8";
+const APP_VERSION = "0.0.9";
 const API = "https://intervals.icu/api/v1";
 const store = {
   get(k){ try{ return localStorage.getItem("pedal."+k) }catch(e){ return null } },
@@ -451,9 +451,25 @@ Reglas:
 - Cada afirmación se apoya en un dato concreto del contexto (fecha y número). Si falta un dato, lo decís; no inventás.
 - Ante señales que pueden ser de salud (FC en reposo muy alta varios días, HRV que se desploma), recomendás descanso y consulta médica, sin diagnosticar.
 - Español rioplatense, directo y concreto, sin relleno.
-- Respondés SOLO con JSON válido, sin texto antes ni después y sin bloques de código.`;
+- Entregás el resultado con la herramienta entregar_resultado, con exactamente la estructura JSON pedida.`;
 
-async function askClaude(user){
+/* Claude devuelve el resultado como entrada de una herramienta obligatoria: llega como objeto ya armado, sin texto que parsear */
+const OUT_TOOL = { name: "entregar_resultado", description: "Entrega el resultado con exactamente la estructura JSON pedida en el mensaje.", input_schema: { type: "object", additionalProperties: true } };
+/* Respaldo si llegara como texto: corta lo que sobra y escapa saltos de línea dentro de cadenas */
+function parseLoose(text){
+  const s = text.indexOf("{"), e = text.lastIndexOf("}"); if(s < 0 || e < s) throw 0;
+  const raw = text.slice(s, e+1);
+  try{ return JSON.parse(raw) }catch(_){}
+  let out = "", inStr = false, esc = false;
+  for(const ch of raw){
+    if(inStr){ if(esc){ esc = false } else if(ch === "\\"){ esc = true } else if(ch === '"'){ inStr = false }
+      else if(ch === "\n"){ out += "\\n"; continue } else if(ch === "\r"){ continue } else if(ch === "\t"){ out += "\\t"; continue } }
+    else if(ch === '"') inStr = true;
+    out += ch;
+  }
+  return JSON.parse(out);
+}
+async function askClaude(user, maxTokens = 16000){
   const {key, model} = aiCfg();
   if(!key) throw new Error("Falta la clave de Claude. Cargala en Ajustes, en la sección Coach con IA.");
   let r;
@@ -461,16 +477,20 @@ async function askClaude(user){
     r = await fetch(AI_URL, { method:"POST", headers:{
       "content-type":"application/json", "x-api-key":key, "anthropic-version":"2023-06-01",
       "anthropic-dangerous-direct-browser-access":"true" },
-      body: JSON.stringify({ model, max_tokens: 3000, system: COACH_SYS, messages:[{role:"user", content:user}] }) });
+      body: JSON.stringify({ model, max_tokens: maxTokens, system: COACH_SYS, messages:[{role:"user", content:user}],
+        tools: [OUT_TOOL], tool_choice: { type: "tool", name: OUT_TOOL.name } }) });
   }catch(e){ throw new Error("No se pudo llegar a Claude. Revisá la conexión a internet.") }
   const j = await r.json().catch(() => null);
   if(r.status===401) throw new Error("Claude rechazó la clave. Revisala en Ajustes.");
   if(r.status===429) throw new Error("Claude está limitando pedidos en este momento. Probá en un minuto.");
+  if(r.status===529 || r.status===503) throw new Error("Claude está saturado en este momento. Probá en unos minutos.");
   if(!r.ok) throw new Error(`Claude respondió ${r.status}: ${j?.error?.message || "error desconocido"}. Si el modelo no existe en tu cuenta, elegí otro en Ajustes.`);
+  if(j?.stop_reason === "max_tokens") throw new Error("La respuesta de Claude fue más larga de lo permitido y llegó cortada. Probá con una ventana de menos días.");
+  const tool = (j?.content||[]).find(b => b.type === "tool_use");
+  if(tool?.input && typeof tool.input === "object") return tool.input;
   const text = (j?.content||[]).filter(b => b.type==="text").map(b => b.text).join("");
-  const s = text.indexOf("{"), e = text.lastIndexOf("}");
-  try{ return JSON.parse(text.slice(s, e+1)) }
-  catch(_){ throw new Error("La respuesta de Claude vino en un formato inesperado. Probá de nuevo.") }
+  try{ return parseLoose(text) }
+  catch(_){ throw new Error("La respuesta de Claude vino en un formato inesperado. Probá de nuevo; si se repite, elegí otro modelo en Ajustes.") }
 }
 
 /* Resumen compacto de los datos para el prompt */
