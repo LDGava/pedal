@@ -613,13 +613,19 @@ const AVAIL_RULES = `Reglas por modo de disponibilidad (la disponibilidad manda 
 - descanso: tipo Descanso, load 0.`;
 
 /* Semana de entrenamiento: se planifica el lunes, de martes a lunes */
-function weekRange(today = new Date()){
-  const t = new Date(today); t.setHours(12,0,0,0);
-  const isMon = t.getDay()===1;
-  const start = isMon ? addDays(t,1) : t;
-  const daysToMon = ((1 - t.getDay()) + 7) % 7 || 7;
-  const end = addDays(t, daysToMon);
-  return { start: iso(start), end: iso(end) };
+/* Fuera del lunes, arranca hoy salvo que ya sea tarde (17 h) o ya haya entrenado; el atleta puede elegir. Termina el primer lunes posterior al arranque. */
+const startKey = () => "week.start." + iso(new Date());
+function startsToday(){
+  if(new Date().getDay()===1) return false;
+  const pick = store.get(startKey()); if(pick) return pick==="hoy";
+  const trained = (state.data?.allActivities||[]).some(a => a.date===iso(new Date()));
+  return new Date().getHours() < 17 && !trained;
+}
+function weekRange(){
+  const t = new Date(); t.setHours(12,0,0,0);
+  const start = startsToday() ? t : addDays(t,1);
+  const toMon = ((1 - start.getDay()) + 7) % 7 || 7;
+  return { start: iso(start), end: iso(addDays(start, toMon)) };
 }
 const WORKOUT_SYNTAX = `Campo "workout" (solo para bici: tipo Ride o VirtualRide): texto en la sintaxis de entrenamientos de intervals.icu, que lo convierte en un entrenamiento estructurado y lo manda al Garmin. Reglas:
 - Cada paso es una línea que empieza con "- ", duración (m = minutos, s = segundos, h = horas) y objetivo en % del FTP, por ejemplo "- 10m 55-65%".
@@ -843,6 +849,8 @@ function viewAvail(D){
   const changed = wk?.modes ? dates.filter(f => wk.modes[f] && wk.modes[f] !== modeOf(f)) : [];
   return `<section class="card"><h2>Disponibilidad · ${shortDate(dates[0])} al ${shortDate(dates[dates.length-1])}</h2>
     <p class="note">Sale de la semana estándar de Ajustes. Si esta semana algo cambia, cambialo acá antes de planificar o de revisar el día. En "clase con profe" el coach no planifica: estima la carga con la historia de esas clases y, cuando la hacés, recalcula el resto con los datos reales.</p>
+    ${new Date().getDay()!==1 && !(wk && wk.r.dias[wk.r.dias.length-1].fecha >= iso(new Date())) ? `<label for="wk-start">El plan arranca</label>
+      <select id="wk-start"><option value="hoy" ${startsToday()?"selected":""}>Hoy</option><option value="manana" ${!startsToday()?"selected":""}>Mañana (${DOW[dowOf(iso(addDays(new Date(),1)))]})</option></select>` : ""}
     <div class="list" style="margin-top:8px">${dates.map(f => `<div class="avail">${dateCell(f)}<div>${modeSelect("av-"+f, "data-avail", f, modeOf(f))}${o[f] ? `<span class="chip" style="color:var(--warn);margin-top:6px">Cambiado esta semana</span>` : ""}</div></div>`).join("")}</div>
     <label for="weeknote">Algo más para esta semana</label>
     <textarea id="weeknote" style="min-height:70px" placeholder="Ej.: el jueves viajo; el sábado puedo hasta 4 horas.">${esc(weekNote())}</textarea>
@@ -1430,6 +1438,7 @@ document.addEventListener("change", e => {
     if(av.value === stdWeek()[dowOf(f)]) delete o[f]; else o[f] = av.value;
     Object.keys(o).forEach(k => { if(k < today) delete o[k] });
     cacheSet("week.override", o); render(); return }
+  if(e.target.id === "wk-start"){ store.set(startKey(), e.target.value); render(); return }
   const sd = e.target.closest("[data-std]");
   if(sd){ const s = cacheGet("week.std") || {}; s[sd.dataset.std] = sd.value; cacheSet("week.std", s) }
 });
