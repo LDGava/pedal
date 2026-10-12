@@ -219,7 +219,7 @@ pre.wo{margin:8px 0 0;padding:10px;border-radius:8px;background:var(--bg);border
 <script>
 (() => {
 "use strict";
-const APP_VERSION = "0.0.9";
+const APP_VERSION = "0.0.10";
 const API = "https://intervals.icu/api/v1";
 const store = {
   get(k){ try{ return localStorage.getItem("pedal."+k) }catch(e){ return null } },
@@ -469,28 +469,58 @@ function parseLoose(text){
   }
   return JSON.parse(out);
 }
-async function askClaude(user, maxTokens = 16000){
+/* Llamada en streaming: la respuesta llega de a partes, la conexión no queda en silencio y el botón muestra el avance */
+async function askClaude(user, progressId, maxTokens = 16000){
   const {key, model} = aiCfg();
   if(!key) throw new Error("Falta la clave de Claude. Cargala en Ajustes, en la sección Coach con IA.");
+  const t0 = Date.now(), ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 6*60*1000);
+  const secs = () => Math.round((Date.now()-t0)/1000);
+  const detail = (extra) => ` [${model} · ${secs()} s${extra ? " · " + extra : ""} · v${APP_VERSION}]`;
+  const show = t => { const b = progressId && document.getElementById(progressId); if(b) b.textContent = t };
   let r;
   try{
-    r = await fetch(AI_URL, { method:"POST", headers:{
+    show("Conectando con Claude…");
+    r = await fetch(AI_URL, { method:"POST", signal: ctl.signal, headers:{
       "content-type":"application/json", "x-api-key":key, "anthropic-version":"2023-06-01",
       "anthropic-dangerous-direct-browser-access":"true" },
-      body: JSON.stringify({ model, max_tokens: maxTokens, system: COACH_SYS, messages:[{role:"user", content:user}],
+      body: JSON.stringify({ model, max_tokens: maxTokens, stream: true, system: COACH_SYS, messages:[{role:"user", content:user}],
         tools: [OUT_TOOL], tool_choice: { type: "tool", name: OUT_TOOL.name } }) });
-  }catch(e){ throw new Error("No se pudo llegar a Claude. Revisá la conexión a internet.") }
-  const j = await r.json().catch(() => null);
-  if(r.status===401) throw new Error("Claude rechazó la clave. Revisala en Ajustes.");
-  if(r.status===429) throw new Error("Claude está limitando pedidos en este momento. Probá en un minuto.");
-  if(r.status===529 || r.status===503) throw new Error("Claude está saturado en este momento. Probá en unos minutos.");
-  if(!r.ok) throw new Error(`Claude respondió ${r.status}: ${j?.error?.message || "error desconocido"}. Si el modelo no existe en tu cuenta, elegí otro en Ajustes.`);
-  if(j?.stop_reason === "max_tokens") throw new Error("La respuesta de Claude fue más larga de lo permitido y llegó cortada. Probá con una ventana de menos días.");
-  const tool = (j?.content||[]).find(b => b.type === "tool_use");
-  if(tool?.input && typeof tool.input === "object") return tool.input;
-  const text = (j?.content||[]).filter(b => b.type==="text").map(b => b.text).join("");
-  try{ return parseLoose(text) }
-  catch(_){ throw new Error("La respuesta de Claude vino en un formato inesperado. Probá de nuevo; si se repite, elegí otro modelo en Ajustes.") }
+  }catch(e){ clearTimeout(timer); throw new Error((e.name==="AbortError" ? "Claude tardó más de 6 minutos." : "No se pudo llegar a Claude. Revisá la conexión a internet.") + detail()) }
+  if(!r.ok){
+    clearTimeout(timer);
+    const j = await r.json().catch(() => null), m = j?.error?.message || "error desconocido";
+    if(r.status===401) throw new Error("Claude rechazó la clave. Revisala en Ajustes." + detail("401"));
+    if(r.status===429) throw new Error("Claude está limitando pedidos en este momento. Probá en un minuto." + detail("429"));
+    if(r.status===529 || r.status===503) throw new Error("Claude está saturado en este momento. Probá en unos minutos." + detail(String(r.status)));
+    if(/credit|balance|billing/i.test(m)) throw new Error("La cuenta de la API no tiene crédito. Cargalo en platform.claude.com → Settings → Billing." + detail(String(r.status)));
+    throw new Error(`Claude respondió ${r.status}: ${m}. Si el modelo no existe en tu cuenta, elegí otro en Ajustes.` + detail(String(r.status)));
+  }
+  let buf = "", json = "", text = "", stop = null, apiErr = null;
+  try{
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    while(true){
+      const { done, value } = await reader.read(); if(done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while((i = buf.indexOf("\n\n")) >= 0){
+        const evt = buf.slice(0, i); buf = buf.slice(i + 2);
+        const line = evt.split("\n").find(l => l.startsWith("data:")); if(!line) continue;
+        let d; try{ d = JSON.parse(line.slice(5)) }catch(_){ continue }
+        if(d.type === "content_block_delta"){
+          if(d.delta?.type === "input_json_delta") json += d.delta.partial_json || "";
+          else if(d.delta?.type === "text_delta") text += d.delta.text || "";
+          show(`Recibiendo plan… ${Math.round((json.length + text.length)/100)/10} mil caracteres · ${secs()} s`);
+        } else if(d.type === "message_delta") stop = d.delta?.stop_reason || stop;
+        else if(d.type === "error") apiErr = d.error;
+      }
+    }
+  }catch(e){ clearTimeout(timer); throw new Error((e.name==="AbortError" ? "Claude tardó más de 6 minutos." : "Se cortó la conexión mientras llegaba la respuesta. Dejá la app abierta en pantalla hasta que termine.") + detail(`${json.length} caracteres recibidos`)) }
+  clearTimeout(timer);
+  if(apiErr) throw new Error((/overloaded/i.test(apiErr.type||"") ? "Claude está saturado en este momento. Probá en unos minutos." : `Claude devolvió un error: ${apiErr.message || apiErr.type}.`) + detail());
+  if(stop === "max_tokens") throw new Error("La respuesta de Claude fue más larga de lo permitido y llegó cortada. Probá con una ventana de menos días." + detail(`${json.length} caracteres`));
+  try{ if(json.trim()) return JSON.parse(json) }catch(_){}
+  try{ return parseLoose(json.trim() ? json : text) }
+  catch(_){ throw new Error("La respuesta de Claude vino en un formato inesperado. Probá de nuevo; si se repite, elegí otro modelo en Ajustes." + detail(`fin: ${stop || "sin dato"} · ${json.length + text.length} caracteres`)) }
 }
 
 /* Resumen compacto de los datos para el prompt */
@@ -782,7 +812,7 @@ Devolvé exactamente este JSON:
 "carga_semana_objetivo":0,"enfoque":"una frase con el objetivo de la semana","descanso":"qué días descansa y por qué, con datos",
 "explicacion":"3 a 5 frases: de dónde viene, cómo está y qué prioriza esta semana",
 "dias":[${DIA_SHAPE}]}`;
-  return askClaude(prompt);
+  return askClaude(prompt, "runweek");
 }
 async function runDaily(){
   const D = state.data, {ctx} = aiCfg(), wk = cacheGet("coach.week");
@@ -805,7 +835,7 @@ Devolvé exactamente este JSON:
 "ajustes":[${DIA_SHAPE.replace('}', ',"motivo":"por qué cambia"}')}],
 "alertas":["señal concreta con dato"],
 "explicacion":"2 a 4 frases sobre cómo viene la semana"}`;
-  return askClaude(prompt);
+  return askClaude(prompt, "rundaily");
 }
 async function runActivity(act){
   const D = state.data, {ctx} = aiCfg();
@@ -833,7 +863,7 @@ Devolvé exactamente este JSON:
 "causas":[{"causa":"factor probable","evidencia":"dato que lo respalda","peso":"alto|medio|bajo"}],
 "que_hacer":["acción concreta para los próximos días"]}
 Si rindió bien, "causas" explica qué lo favoreció.`;
-  return askClaude(prompt);
+  return askClaude(prompt, "runact");
 }
 
 /* Caché por teléfono de las respuestas del coach */
