@@ -223,7 +223,7 @@ pre.wo{margin:8px 0 0;padding:10px;border-radius:8px;background:var(--bg);border
 <script>
 (() => {
 "use strict";
-const APP_VERSION = "0.0.15";
+const APP_VERSION = "0.0.16";
 const API = "https://intervals.icu/api/v1";
 const store = {
   get(k){ try{ return localStorage.getItem("pedal."+k) }catch(e){ return null } },
@@ -1465,9 +1465,37 @@ function viewBienestar(D){
   ${has("hrv") ? `<section class="card"><h2>HRV · 30 días</h2>${lineChart([{values:w.map(x=>x.hrv),c:"--good"}],{h:130,labels:w.map(x=>shortDate(x.date)),aria:"HRV de los últimos 30 días"})}</section>` : ""}
   ${has("rhr") ? `<section class="card"><h2>FC en reposo · 30 días</h2>${lineChart([{values:w.map(x=>x.rhr),c:"--atl"}],{h:130,labels:w.map(x=>shortDate(x.date)),aria:"Frecuencia cardíaca en reposo de los últimos 30 días"})}</section>` : ""}`;
 }
+/* Importación del CSV de consumo de platform.claude.com → Usage → Export. Lo facturado reemplaza a lo estimado por la app en esas fechas */
+function parseCostCsv(text){
+  const lines = text.split(/\r?\n/).filter(l => l.trim()); if(lines.length < 2) throw new Error("El archivo está vacío.");
+  const split = l => { const out=[]; let cur="", q=false; for(const ch of l){ if(ch==='"'){ q=!q } else if(ch===',' && !q){ out.push(cur); cur="" } else cur+=ch } out.push(cur); return out };
+  const head = split(lines[0]).map(h => h.trim().toLowerCase());
+  const iDate = head.indexOf("usage_date_utc"), iModel = head.indexOf("model"), iCost = head.indexOf("cost_usd"), iType = head.indexOf("cost_type");
+  if(iDate < 0 || iCost < 0) throw new Error("No parece el CSV de consumo de Anthropic: faltan las columnas usage_date_utc o cost_usd.");
+  const agg = {};
+  for(const l of lines.slice(1)){ const c = split(l); const d = (c[iDate]||"").trim(), cost = parseFloat(c[iCost]) || 0;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d) || cost <= 0) continue;
+    const model = (c[iModel]||"").trim().replace(/^--$/, "") || "otros", key = d + "|" + model;
+    agg[key] = agg[key] || { date: d, model, usd: 0, types: new Set() }; agg[key].usd += cost; if(iType >= 0) agg[key].types.add(c[iType]);
+  }
+  const rows = Object.values(agg); if(!rows.length) throw new Error("El archivo no tiene filas con costo mayor a cero.");
+  return rows;
+}
+function importCosts(rows){
+  const dates = new Set(rows.map(r => r.date));
+  const list = (cacheGet("costs") || []).filter(c => !(c.imported && dates.has(c.date)));
+  rows.forEach(r => list.push({ at: new Date(r.date + "T12:00:00").getTime(), date: r.date, model: r.model, kind: "Facturado por Anthropic", in: 0, out: 0, usd: +r.usd.toFixed(4), imported: true }));
+  list.sort((a,b) => a.at - b.at); cacheSet("costs", list.slice(-800));
+  return { dias: dates.size, usd: rows.reduce((t,r) => t + r.usd, 0), desde: [...dates].sort()[0], hasta: [...dates].sort().slice(-1)[0] };
+}
+/* Lista efectiva: en las fechas con factura real, las estimaciones de la app no cuentan */
+function effectiveCosts(){
+  const list = cacheGet("costs") || [], billed = new Set(list.filter(c => c.imported).map(c => c.date));
+  return list.filter(c => c.imported || !billed.has(iso(new Date(c.at))));
+}
 const usd = v => "USD " + (v < 0.01 && v > 0 ? v.toFixed(4) : v.toFixed(2)).replace(".", ",");
 function viewCostos(){
-  const list = cacheGet("costs") || [];
+  const list = effectiveCosts(), nImp = list.filter(c => c.imported).length;
   const now = new Date(), m0 = new Date(now.getFullYear(), now.getMonth(), 1).getTime(), w0 = addDays(now, -7).getTime();
   const month = list.filter(c => c.at >= m0), week = list.filter(c => c.at >= w0);
   const tot = a => a.reduce((t,c) => t + c.usd, 0);
@@ -1482,11 +1510,18 @@ function viewCostos(){
       <div class="stat"><small>Desde el inicio</small><b>${usd(tot(list))}</b><br><em>${firstAt ? "desde el " + shortDate(iso(firstAt)) : "todavía sin registros"}</em></div>
       <div class="stat"><small>Tokens este mes</small><b>${Math.round(month.reduce((t,c)=>t+c.in+c.out,0)/1000)}k</b><br><em>${Math.round(month.reduce((t,c)=>t+c.in,0)/1000)}k entrada · ${Math.round(month.reduce((t,c)=>t+c.out,0)/1000)}k salida</em></div>
     </div>
-    <p class="note" style="margin-top:12px">La app anota cada llamada con los tokens que informa Claude y los precios de lista. Lo gastado antes de esta versión y la cifra exacta facturada están en platform.claude.com → Usage. El registro vive en este teléfono.</p></section>
+    <p class="note" style="margin-top:12px">La app anota cada llamada con los tokens que informa Claude y los precios de lista.${nImp ? " En los días con factura importada se usa la cifra facturada por Anthropic en lugar de la estimación." : ""} El registro vive en este teléfono.</p></section>
+  <section class="card"><h2>Importar la factura de Anthropic</h2>
+    <p class="note">En platform.claude.com → Usage, exportá el CSV de costos y elegilo acá. Trae el histórico real y, en esas fechas, reemplaza las estimaciones. Se puede repetir cada mes.</p>
+    <div class="btns"><label class="btn primary" for="costfile" style="cursor:pointer">Elegir archivo CSV</label><input type="file" id="costfile" accept=".csv,text/csv" hidden></div>
+    <label for="costpaste">O pegá el contenido del CSV</label>
+    <textarea id="costpaste" style="min-height:70px;font:12px var(--mono)" placeholder="usage_date_utc,model,…"></textarea>
+    <div class="btns"><button class="btn" type="button" id="costpastebtn">Importar lo pegado</button>${nImp ? `<button class="btn danger" type="button" id="costclear">Borrar lo importado</button>` : ""}</div>
+    <p class="msg ${state.costMsg?.ok ? "ok" : "bad"}" id="costmsg" role="status">${state.costMsg ? esc(state.costMsg.t) : ""}</p></section>
   ${month.length ? `<section class="card"><h2>Este mes por tipo</h2><div class="list">${Object.entries(byKind).sort((a,b) => b[1].usd - a[1].usd).map(([k,v]) => `<div class="row" style="grid-template-columns:1fr auto"><div class="t"><b>${esc(k)}</b><span>${v.n} ${v.n===1?"llamada":"llamadas"} · ${Math.round(v.in/1000)}k entrada · ${Math.round(v.out/1000)}k salida · ${usd(v.usd/v.n)} cada una</span></div><div class="load">${usd(v.usd).replace("USD ","")}<small>USD</small></div></div>`).join("")}</div></section>` : ""}
   ${list.length ? `<section class="card"><h2>Últimos 30 días</h2>${barChartMoney(days)}</section>` : ""}
   ${list.length ? `<section class="card"><h2>Últimas llamadas</h2><div class="list">${list.slice(-25).reverse().map(c => { const d = new Date(c.at);
-      return `<div class="row" style="grid-template-columns:44px 1fr auto">${dateCell(iso(d))}<div class="t"><b>${esc(c.kind)}</b><span>${d.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})} · ${esc(c.model.replace("claude-",""))} · ${(c.in/1000).toFixed(1).replace(".",",")}k + ${(c.out/1000).toFixed(1).replace(".",",")}k tokens</span></div><div class="load">${c.usd.toFixed(3).replace(".",",")}<small>USD</small></div></div>` }).join("")}</div></section>` : ""}
+      return `<div class="row" style="grid-template-columns:44px 1fr auto">${dateCell(iso(d))}<div class="t"><b>${esc(c.kind)}</b><span>${c.imported ? esc(c.model) + " · total del día facturado" : d.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}) + " · " + esc(c.model.replace("claude-","")) + " · " + (c.in/1000).toFixed(1).replace(".",",") + "k + " + (c.out/1000).toFixed(1).replace(".",",") + "k tokens"}</span></div><div class="load">${c.usd.toFixed(3).replace(".",",")}<small>USD</small></div></div>` }).join("")}</div></section>` : ""}
   <section class="card"><h2>Precios de lista por millón de tokens</h2><div class="list">${MODELS.map(([m,l]) => { const [pi,po] = priceOf(m); return `<div class="row" style="grid-template-columns:1fr auto"><div class="t"><b>${esc(l.split(":")[0])}</b><span>${esc(m)}</span></div><div class="load" style="font-size:15px">${pi} / ${po}<small>ENTRADA / SALIDA</small></div></div>` }).join("")}</div></section>`;
 }
 function barChartMoney(days){
@@ -1595,6 +1630,12 @@ function renderInner(){
   const rw = $("#runweek"); if(rw) rw.addEventListener("click", doWeek);
   const fw = $("#fillwo"); if(fw) fw.addEventListener("click", doFill);
   bindRaces();
+  const doImport = text => { const msg = $("#costmsg");
+    try{ const r = importCosts(parseCostCsv(text)); state.costMsg = { ok:true, t:`Importado: ${usd(r.usd)} en ${r.dias} ${r.dias===1?"día":"días"} (${shortDate(r.desde)} al ${shortDate(r.hasta)}).` }; render() }
+    catch(e){ msg.className = "msg bad"; msg.textContent = e.message } };
+  const cf = $("#costfile"); if(cf) cf.addEventListener("change", () => { const f = cf.files?.[0]; if(!f) return; const rd = new FileReader(); rd.onload = () => doImport(String(rd.result)); rd.readAsText(f) });
+  const cp = $("#costpastebtn"); if(cp) cp.addEventListener("click", () => doImport($("#costpaste").value));
+  const cc = $("#costclear"); if(cc) cc.addEventListener("click", () => { cacheSet("costs", (cacheGet("costs")||[]).filter(c => !c.imported)); state.costMsg = { ok:true, t:"Datos importados borrados; quedan las estimaciones de la app." }; render() });
   const hf = $("#home-find"); if(hf) hf.addEventListener("click", async () => {
     const q = $("#home-q").value.trim(); if(!q) return;
     try{ state.homeResults = await geocode(q); state.homeMsg = null }catch(e){ state.homeMsg = e.message }
