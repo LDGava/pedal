@@ -103,6 +103,8 @@ main{padding-inline:16px;padding-block:16px calc(env(safe-area-inset-bottom,0px)
 .row{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
 .row:first-child{border-top:0;padding-top:0}
 .row.same{border-top:1px dashed var(--line)}
+.real{display:block;white-space:normal;font:12px var(--mono);margin-top:4px;opacity:1}
+.row .t .real.bad{color:var(--bad)} .row .t .real.warn{color:var(--warn)} .row .t .real.ok{color:var(--good)}
 .date{text-align:center;font:600 11px var(--mono);color:var(--muted);text-transform:uppercase;line-height:1.2}
 .date b{display:block;font:700 22px/1 var(--display);color:var(--fg)}
 .row .t{min-width:0}
@@ -219,7 +221,7 @@ pre.wo{margin:8px 0 0;padding:10px;border-radius:8px;background:var(--bg);border
 <script>
 (() => {
 "use strict";
-const APP_VERSION = "0.0.12";
+const APP_VERSION = "0.0.13";
 const API = "https://intervals.icu/api/v1";
 const store = {
   get(k){ try{ return localStorage.getItem("pedal."+k) }catch(e){ return null } },
@@ -916,7 +918,9 @@ Si rindió bien, "causas" explica qué lo favoreció.`;
 }
 
 /* Caché por teléfono de las respuestas del coach */
-const cacheGet = k => { try{ return JSON.parse(store.get(k)||"null") }catch(_){ return null } };
+const cacheGet = k => { try{ const v = JSON.parse(store.get(k)||"null");
+  if(k === "coach.week" && v && !(Array.isArray(v.r?.dias) && v.r.dias.length)){ store.del(k); return null }
+  return v }catch(_){ return null } };
 const cacheSet = (k,v) => store.set(k, JSON.stringify(v));
 
 /* ---------- Gráficos SVG ---------- */
@@ -1069,6 +1073,14 @@ function viewCoach(D){
   if(w) html += `<section class="card"><h2>Días</h2><div class="list">${w.dias.map((d,i) => {
       const sameDay = i > 0 && w.dias[i-1].fecha === d.fecha;
       const past = d.fecha < today, isT = d.fecha===today;
+      let real = "";
+      if(past && d.tipo !== "Descanso" && !sameDay){
+        const acts = (D.allActivities||D.activities).filter(a => a.date === d.fecha), planDay = w.dias.filter(x => x.fecha === d.fecha);
+        const rl = sum(acts, a => a.load), pl = sum(planDay, x => x.load);
+        if(!acts.length) real = `<span class="real bad">No registró actividad</span>`;
+        else if(pl && rl < pl*0.7) real = `<span class="real warn">Hizo: ${esc(acts.map(a => a.name).join(" + "))} · carga ${n0(rl)} de ${n0(pl)}${acts.some(a=>a.rpe) ? " · RPE " + Math.max(...acts.map(a=>a.rpe||0)) : ""}</span>`;
+        else real = `<span class="real ok">Hecho: carga ${n0(rl)}${acts.some(a=>a.rpe) ? " · RPE " + Math.max(...acts.map(a=>a.rpe||0)) : ""}</span>`;
+      }
       const chips = [
         isT ? `<span class="chip" style="color:var(--accent)">Hoy</span>` : "",
         d.tipo==="BiciLibre" ? `<span class="chip" style="color:var(--atl)">Recepción</span>` : "",
@@ -1078,8 +1090,8 @@ function viewCoach(D){
         d.eventId && !d.dirty ? `<span class="chip" style="color:var(--good)">En Garmin</span>` : "",
         d.eventId && d.dirty ? `<span class="chip" style="color:var(--warn)">Cambio sin mandar</span>` : ""
       ].join("");
-      return `<div class="row${sameDay?" same":""}" style="${past?"opacity:.55":""}">${sameDay ? "<div></div>" : dateCell(d.fecha)}<div class="t"><b>${esc(d.sesion)}</b><span style="white-space:normal">${chips}${esc([d.min?fmtDur(d.min*60):"", d.detalle].filter(Boolean).join(" · "))}</span>
-        ${d.motivo ? `<span style="white-space:normal;display:block;color:var(--warn)">${esc(d.motivo)}</span>` : ""}
+      return `<div class="row${sameDay?" same":""}" style="${past && !real?"opacity:.55":""}">${sameDay ? "<div></div>" : dateCell(d.fecha)}<div class="t"><b>${esc(d.sesion)}</b><span style="white-space:normal">${chips}${esc([d.min?fmtDur(d.min*60):"", d.detalle].filter(Boolean).join(" · "))}</span>
+        ${d.motivo ? `<span style="white-space:normal;display:block;color:var(--warn)">${esc(d.motivo)}</span>` : ""}${real}
         ${d.workout ? `<button class="mini" data-wo="${i}">${state.openWo===i ? "Ocultar" : d.tipo==="WeightTraining" ? "Ver rutina" : "Ver estructura"}</button>${state.openWo===i ? `<pre class="wo">${esc(d.workout)}${d.nota ? "\n\n" + esc(d.nota) : ""}</pre>` : ""}` : ""}</div>
         <div class="load">${d.load?n0(d.load):"—"}<small>CARGA</small></div></div>` }).join("")}</div></section>`;
 
@@ -1134,7 +1146,8 @@ async function doWeek(){
     const r = await runWeek();
     if(Array.isArray(r.aprendizajes)) cacheSet("coach.notes", r.aprendizajes.filter(Boolean).slice(0,12));
     const old = cacheGet("coach.week"), today = iso(new Date());
-    const dias = (r.dias||[]).sort((p,q) => p.fecha.localeCompare(q.fecha));
+    const dias = (r.dias||[]).filter(d => d && /^\d{4}-\d{2}-\d{2}$/.test(d.fecha||"")).sort((p,q) => p.fecha.localeCompare(q.fecha));
+    if(!dias.length) throw new Error("Claude devolvió un plan sin días. Probá de nuevo; si se repite, elegí otro modelo en Ajustes.");
     const wk = { at: Date.now(), r: { ...r, dias: [] }, modes: {}, orphans: [] };
     if(old){ wk.r.dias = old.r.dias.filter(d => d.fecha >= today); wk.orphans = old.orphans || [] }
     [...new Set([...dias.map(d => d.fecha), ...wk.r.dias.map(d => d.fecha)])].forEach(f => replaceDay(wk, f, dias.filter(d => d.fecha === f), false));
@@ -1494,6 +1507,14 @@ function viewAjustes(){
 
 /* ---------- Render y navegación ---------- */
 function render(){
+  try{ renderInner() }
+  catch(e){
+    $("#main").innerHTML = `<section class="card err"><p><b>Esta pantalla no se pudo dibujar.</b> ${esc(e.message)}</p><p class="note" style="margin-top:8px">Si pasa en Coach, suele ser un plan guardado a medias.</p></section>
+      <div class="btns"><button class="btn primary" id="fixweek">Descartar el plan guardado</button><button class="btn" data-go="hoy">Ir a Hoy</button></div>`;
+    const b = $("#fixweek"); if(b) b.addEventListener("click", () => { store.del("coach.week"); store.del("coach.daily"); render() });
+  }
+}
+function renderInner(){
   const v = state.view;
   document.querySelectorAll(".nav").forEach(b => b.dataset.view===v ? b.setAttribute("aria-current","page") : b.removeAttribute("aria-current"));
   $("#title").textContent = TITLES[v];
