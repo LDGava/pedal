@@ -103,6 +103,7 @@ main{padding-inline:16px;padding-block:16px calc(env(safe-area-inset-bottom,0px)
 .row{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
 .row:first-child{border-top:0;padding-top:0}
 .row.same{border-top:1px dashed var(--line)}
+.row .t .why{display:block;white-space:normal;font:13px/1.35 var(--body);color:var(--muted);margin-top:3px}
 .real{display:block;white-space:normal;font:12px var(--mono);margin-top:4px;opacity:1}
 .row .t .real.bad{color:var(--bad)} .row .t .real.warn{color:var(--warn)} .row .t .real.ok{color:var(--good)}
 .date{text-align:center;font:600 11px var(--mono);color:var(--muted);text-transform:uppercase;line-height:1.2}
@@ -221,7 +222,7 @@ pre.wo{margin:8px 0 0;padding:10px;border-radius:8px;background:var(--bg);border
 <script>
 (() => {
 "use strict";
-const APP_VERSION = "0.0.13";
+const APP_VERSION = "0.0.14";
 const API = "https://intervals.icu/api/v1";
 const store = {
   get(k){ try{ return localStorage.getItem("pedal."+k) }catch(e){ return null } },
@@ -433,7 +434,16 @@ const MODELS = [
   ["claude-opus-5-5","Opus: análisis más profundo, más caro"],
   ["claude-haiku-4-5-20251001","Haiku: más rápido y barato"]
 ];
-function aiCfg(){ return { key: store.get("aikey"), model: store.get("aimodel") || MODELS[0][0], ctx: store.get("aictx") || "" } }
+function aiCfg(){ return { key: store.get("aikey"), model: store.get("aimodel") || MODELS[0][0], ctx: store.get("aictx") || "", gym: store.get("aigym") || "equilibrio" } }
+const GYM_PREFS = [
+  ["equilibrio", "Equilibrio", "Piernas una vez por semana, lejos de la sesión de calidad; el resto, tren superior y core."],
+  ["piernas", "Prioridad piernas", "Fuerza de piernas en cada gimnasio, aunque la bici del día siguiente se sienta algo pesada. El coach acomoda la bici."],
+  ["bici", "Prioridad bici", "El gimnasio nunca compromete la bici: piernas solo si el día siguiente es suave o libre."]
+];
+const GYM_RULE = () => { const g = aiCfg().gym; return g === "piernas"
+  ? "Preferencia de gimnasio del atleta: PRIORIDAD PIERNAS. Cada gimnasio incluye fuerza de tren inferior (sentadilla, peso muerto, zancadas, prensa) y aceptás que la bici del día siguiente se sienta pesada: ajustá la bici, no el gimnasio. Excepción: los 5 días previos a una carrera A o B, sin piernas pesado."
+  : g === "bici" ? "Preferencia de gimnasio del atleta: PRIORIDAD BICI. Piernas pesado solo si el día siguiente es suave, libre o descanso; el resto, tren superior y core. Nunca piernas en los 2 días previos a calidad, salida larga o carrera."
+  : "Preferencia de gimnasio del atleta: EQUILIBRIO. Una sesión de piernas por semana, ubicada lo más lejos posible de la sesión de calidad y de la salida larga (ideal: el día después de la calidad o antes de un día suave); los demás gimnasios, tren superior y core. Sin piernas pesado en los 3 días previos a una carrera A o B." };
 const COACH_SYS = `Sos un entrenador de ciclismo con formación en fisiología del ejercicio. Trabajás con datos de intervals.icu:
 - CTL = fitness (promedio de carga de 42 días), ATL = fatiga (7 días), TSB = CTL − ATL = forma. "load" es la carga de la sesión (equivalente a TSS).
 - NP = potencia normalizada, IF = intensidad respecto del FTP (en %), rpe = esfuerzo percibido 1–10, decoupling = deriva FC/potencia en %.
@@ -702,7 +712,7 @@ async function saveRace(form){
 }
 
 const AVAIL_RULES = `Disponibilidad (manda sobre cualquier otra regla y sobre lo que haya en el calendario de Intervals). Cada día puede combinar tres cosas, cada una con las horas que el atleta tiene:
-- gimnasio_h: vos das la rutina. Una sesión tipo WeightTraining de hasta esas horas. En "detalle" va el objetivo y el foco (p. ej. "fuerza de tren inferior, sin fatiga residual para el jueves"); la rutina se arma después, aparte. Ajustala a la bici: nada de piernas pesado el día antes de una sesión de calidad ni el día de una salida larga. "load" estimalo con referencia_gimnasio.carga_por_hora × horas si existe.
+- gimnasio_h: vos das la rutina. Una sesión tipo WeightTraining de hasta esas horas. En "detalle" va el objetivo y el foco (p. ej. "fuerza de tren inferior, sin fatiga residual para el jueves"); la rutina se arma después, aparte. El foco (piernas, tren superior, core) sale de la preferencia de gimnasio del atleta y de la ubicación en la semana. "load" estimalo con referencia_gimnasio.carga_por_hora por las horas si existe.
 - bici_coach_h: vos das la sesión de bici. Una sesión tipo Ride (o VirtualRide si el clima obliga a rodillo) que no supere esas horas. En "detalle" va la estructura resumida (p. ej. "3×12 min a 92–95 % FTP, rec. 5 min"); el entrenamiento completo se arma después, aparte. Puede ser más corta si conviene.
 - bici_libre_h: MODO RECEPCIÓN. Sale por su cuenta o con un profesor y el contenido no lo decidís vos. Una sesión tipo "BiciLibre", sesion "Bici libre", min = horas × 60, load y rpe_esperado = estimado_bici_libre (o tu estimación si no hay), workout vacío. Planificá el resto contando esa carga; cuando se haga, se usa la real.
 - carrera_h: competencia. Una sesión tipo "Carrera", sesion con el nombre de la carrera si está registrada, min = horas × 60, load y rpe_esperado = estimado_carrera, workout vacío. No la planifiques: prepará los días previos (descarga y activación según su prioridad y su modelo personal si está validado) y poné recuperación el día siguiente.
@@ -748,7 +758,7 @@ Bloque principal 3x
 Vuelta a la calma
 - 10m 50%
 Para bici libre, carrera y descanso, "workout" va vacío; para gimnasio va la rutina como se indica en las reglas de disponibilidad.`;
-const DIA_SHAPE = `{"fecha":"YYYY-MM-DD","tipo":"Ride|VirtualRide|WeightTraining|BiciLibre|Carrera|Descanso","sesion":"nombre corto","detalle":"objetivo y estructura resumida en una línea","min":0,"load":0,"rpe_esperado":0}`;
+const DIA_SHAPE = `{"fecha":"YYYY-MM-DD","tipo":"Ride|VirtualRide|WeightTraining|BiciLibre|Carrera|Descanso","sesion":"nombre corto","detalle":"objetivo y estructura resumida en una línea","porque":"una frase: por qué esta sesión, con este foco, en este día (con el dato que lo justifica)","min":0,"load":0,"rpe_esperado":0}`;
 /* ---- Memoria del coach: plan vs real, aprendizajes y 52 semanas ---- */
 const sum = (arr, f) => arr.reduce((t,x) => t + (f(x)||0), 0);
 function mondayOf(dateStr){ const d = new Date(dateStr+"T12:00:00"); return iso(addDays(d, -((d.getDay()+6)%7))) }
@@ -795,6 +805,7 @@ function header(D, ctx){
   return `Hoy es ${iso(new Date())} (${DOW[new Date().getDay()]}).
 Atleta: ${D.name}. FTP: ${D.ftp ?? "sin dato"} W. Umbral FC: ${D.lthr ?? "sin dato"}. FC máx: ${D.maxhr ?? "sin dato"}.
 Contexto que da el atleta: ${ctx || "no informado"}.
+${GYM_RULE()}
 ${modelSummary()}
 Pronóstico del clima donde entrena (${homePlace()?.name || "lugar no configurado"}): ${state.wx ? JSON.stringify(state.wx) : "no disponible"}.
 Carreras del atleta (pasadas con resultado, forma con la que llegó, carga de la semana previa y clima; futuras con días que faltan): ${races().length ? JSON.stringify(racesForPrompt(D)) : "ninguna registrada"}.
@@ -857,7 +868,8 @@ async function buildWorkout(d, D){
   const prompt = `Atleta: ${D.name}. FTP: ${D.ftp ?? "sin dato"} W. Contexto: ${aiCfg().ctx || "no informado"}.
 Sesión a armar: ${JSON.stringify({ fecha:d.fecha, dia:DOW[dowOf(d.fecha)], tipo:d.tipo, sesion:d.sesion, detalle:d.detalle, min:d.min, load:d.load, rpe_esperado:d.rpe_esperado })}
 Sesiones vecinas (dos días antes y después), para que sea compatible: ${JSON.stringify(same)}
-${gym ? `Armá la rutina de gimnasio completa para ${d.min} minutos: un ejercicio por línea con series × repeticiones, carga orientativa (RPE o % de 1RM) y descanso; las líneas NO empiezan con guion. Respetá el foco de "detalle" y la compatibilidad con la bici de los días vecinos.`
+${gym ? `${GYM_RULE()}
+Armá la rutina de gimnasio completa para ${d.min} minutos: un ejercicio por línea con series x repeticiones, carga orientativa (RPE o % de 1RM) y descanso; las líneas NO empiezan con guion. Respetá el foco de "detalle" y la compatibilidad con la bici de los días vecinos. La primera línea de "workout" es el título del foco (p. ej. "Foco: fuerza de piernas") y en "nota" explicás en una frase por qué ese foco y no otro, citando los días vecinos.`
       : `Armá el entrenamiento de bici completo para ${d.min} minutos, con la estructura de "detalle". ${WORKOUT_SYNTAX}`}
 Devolvé exactamente este JSON: {"workout":"texto completo","nota":"una frase con la clave de ejecución"}`;
   const r = await askClaude(prompt, null, 2500);
@@ -1091,7 +1103,7 @@ function viewCoach(D){
         d.eventId && d.dirty ? `<span class="chip" style="color:var(--warn)">Cambio sin mandar</span>` : ""
       ].join("");
       return `<div class="row${sameDay?" same":""}" style="${past && !real?"opacity:.55":""}">${sameDay ? "<div></div>" : dateCell(d.fecha)}<div class="t"><b>${esc(d.sesion)}</b><span style="white-space:normal">${chips}${esc([d.min?fmtDur(d.min*60):"", d.detalle].filter(Boolean).join(" · "))}</span>
-        ${d.motivo ? `<span style="white-space:normal;display:block;color:var(--warn)">${esc(d.motivo)}</span>` : ""}${real}
+        ${d.porque ? `<span class="why">${esc(d.porque)}</span>` : ""}${d.motivo ? `<span style="white-space:normal;display:block;color:var(--warn)">${esc(d.motivo)}</span>` : ""}${real}
         ${d.workout ? `<button class="mini" data-wo="${i}">${state.openWo===i ? "Ocultar" : d.tipo==="WeightTraining" ? "Ver rutina" : "Ver estructura"}</button>${state.openWo===i ? `<pre class="wo">${esc(d.workout)}${d.nota ? "\n\n" + esc(d.nota) : ""}</pre>` : ""}` : ""}</div>
         <div class="load">${d.load?n0(d.load):"—"}<small>CARGA</small></div></div>` }).join("")}</div></section>`;
 
@@ -1475,6 +1487,9 @@ function viewAjustes(){
       <input type="password" id="aikey" placeholder="${aiCfg().key ? "Guardada en este teléfono" : "sk-ant-…"}">
       <label for="aimodel">Modelo</label>
       <select id="aimodel">${MODELS.map(([v,l]) => `<option value="${v}" ${aiCfg().model===v?"selected":""}>${esc(l)}</option>`).join("")}</select>
+      <label for="aigym">Gimnasio</label>
+      <select id="aigym">${GYM_PREFS.map(([v,l]) => `<option value="${v}" ${aiCfg().gym===v?"selected":""}>${esc(l)}</option>`).join("")}</select>
+      <p class="note" id="aigymnote" style="margin-top:6px">${esc(GYM_PREFS.find(x => x[0]===aiCfg().gym)[2])}</p>
       <label for="aictx">Contexto del atleta</label>
       <textarea id="aictx" placeholder="Objetivo: Gran Fondo de 160 km el 15/11. Entreno 8–10 h por semana; martes y jueves en rodillo, sábado salida larga. Sin lesiones.">${esc(aiCfg().ctx)}</textarea>
       <div class="btns">
@@ -1576,6 +1591,7 @@ function bindAjustes(){
     const k = $("#aikey").value.trim(), msg = $("#aimsg");
     if(k) store.set("aikey", k);
     store.set("aimodel", $("#aimodel").value);
+    store.set("aigym", $("#aigym").value);
     store.set("aictx", $("#aictx").value.trim());
     msg.className = aiCfg().key ? "msg ok" : "msg bad";
     msg.textContent = aiCfg().key ? "Coach guardado. Ya podés pedir la revisión en Coach." : "Guardé el contexto, pero falta la clave de Claude.";
@@ -1659,6 +1675,7 @@ document.addEventListener("click", e => {
 });
 $("#refresh").addEventListener("click", refresh);
 document.addEventListener("change", e => {
+  if(e.target.id === "aigym"){ store.set("aigym", e.target.value); $("#aigymnote").textContent = GYM_PREFS.find(x => x[0]===e.target.value)[2]; return }
   const op = e.target.closest("[data-opt]");
   if(op){ const k = op.dataset.opt, def = OPTS.find(x => x[0]===k)[3];
     setDay(op.dataset.scope, op.dataset.key, c => { if(op.checked) c[k] = def; else delete c[k] }); render(); return }
