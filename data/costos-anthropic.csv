@@ -1,0 +1,11 @@
+usage_date_utc,model,token_type,cost_usd
+2026-10-11,Claude Opus 5.5,input_no_cache,0.04
+2026-10-11,Claude Opus 5.5,output,0.06
+2026-10-12,Claude Opus 5.5,input_no_cache,0.26
+2026-10-12,Claude Opus 5.5,output,0.41
+2026-10-12,Claude Sonnet 5.5,input_no_cache,0.06
+2026-10-12,Claude Sonnet 5.5,output,0.16
+2026-10-15,Claude Sonnet 5.5,input_no_cache,0.09
+2026-10-15,Claude Sonnet 5.5,output,0.15
+2026-10-16,Claude Sonnet 5.5,input_no_cache,0.03
+2026-10-16,Claude Sonnet 5.5,output,0.04

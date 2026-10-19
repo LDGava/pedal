@@ -223,7 +223,7 @@ pre.wo{margin:8px 0 0;padding:10px;border-radius:8px;background:var(--bg);border
 <script>
 (() => {
 "use strict";
-const APP_VERSION = "0.0.16";
+const APP_VERSION = "0.0.17";
 const API = "https://intervals.icu/api/v1";
 const store = {
   get(k){ try{ return localStorage.getItem("pedal."+k) }catch(e){ return null } },
@@ -1465,7 +1465,14 @@ function viewBienestar(D){
   ${has("hrv") ? `<section class="card"><h2>HRV · 30 días</h2>${lineChart([{values:w.map(x=>x.hrv),c:"--good"}],{h:130,labels:w.map(x=>shortDate(x.date)),aria:"HRV de los últimos 30 días"})}</section>` : ""}
   ${has("rhr") ? `<section class="card"><h2>FC en reposo · 30 días</h2>${lineChart([{values:w.map(x=>x.rhr),c:"--atl"}],{h:130,labels:w.map(x=>shortDate(x.date)),aria:"Frecuencia cardíaca en reposo de los últimos 30 días"})}</section>` : ""}`;
 }
-/* Importación del CSV de consumo de platform.claude.com → Usage → Export. Lo facturado reemplaza a lo estimado por la app en esas fechas */
+/* Facturación real: la app lee data/costos-anthropic.csv del propio repositorio (se actualiza con el export de platform.claude.com → Usage). Lo facturado reemplaza a lo estimado por la app en esas fechas */
+async function loadBilling(){
+  try{ const r = await fetch("data/costos-anthropic.csv?t=" + Math.floor(Date.now()/3600e3), { cache: "no-store" }); if(!r.ok) throw 0;
+    const rows = parseCostCsv(await r.text());
+    state.billing = rows.map(x => ({ at: new Date(x.date + "T12:00:00").getTime(), date: x.date, model: x.model, kind: "Facturado por Anthropic", in: 0, out: 0, usd: +x.usd.toFixed(4), imported: true }));
+    cacheSet("billing.cache", state.billing);
+  }catch(_){ state.billing = cacheGet("billing.cache") || [] }
+}
 function parseCostCsv(text){
   const lines = text.split(/\r?\n/).filter(l => l.trim()); if(lines.length < 2) throw new Error("El archivo está vacío.");
   const split = l => { const out=[]; let cur="", q=false; for(const ch of l){ if(ch==='"'){ q=!q } else if(ch===',' && !q){ out.push(cur); cur="" } else cur+=ch } out.push(cur); return out };
@@ -1481,17 +1488,11 @@ function parseCostCsv(text){
   const rows = Object.values(agg); if(!rows.length) throw new Error("El archivo no tiene filas con costo mayor a cero.");
   return rows;
 }
-function importCosts(rows){
-  const dates = new Set(rows.map(r => r.date));
-  const list = (cacheGet("costs") || []).filter(c => !(c.imported && dates.has(c.date)));
-  rows.forEach(r => list.push({ at: new Date(r.date + "T12:00:00").getTime(), date: r.date, model: r.model, kind: "Facturado por Anthropic", in: 0, out: 0, usd: +r.usd.toFixed(4), imported: true }));
-  list.sort((a,b) => a.at - b.at); cacheSet("costs", list.slice(-800));
-  return { dias: dates.size, usd: rows.reduce((t,r) => t + r.usd, 0), desde: [...dates].sort()[0], hasta: [...dates].sort().slice(-1)[0] };
-}
 /* Lista efectiva: en las fechas con factura real, las estimaciones de la app no cuentan */
 function effectiveCosts(){
-  const list = cacheGet("costs") || [], billed = new Set(list.filter(c => c.imported).map(c => c.date));
-  return list.filter(c => c.imported || !billed.has(iso(new Date(c.at))));
+  const billing = state.billing || cacheGet("billing.cache") || [], billed = new Set(billing.map(c => c.date));
+  const local = (cacheGet("costs") || []).filter(c => !c.imported && !billed.has(iso(new Date(c.at))));
+  return [...billing, ...local].sort((a,b) => a.at - b.at);
 }
 const usd = v => "USD " + (v < 0.01 && v > 0 ? v.toFixed(4) : v.toFixed(2)).replace(".", ",");
 function viewCostos(){
@@ -1510,14 +1511,7 @@ function viewCostos(){
       <div class="stat"><small>Desde el inicio</small><b>${usd(tot(list))}</b><br><em>${firstAt ? "desde el " + shortDate(iso(firstAt)) : "todavía sin registros"}</em></div>
       <div class="stat"><small>Tokens este mes</small><b>${Math.round(month.reduce((t,c)=>t+c.in+c.out,0)/1000)}k</b><br><em>${Math.round(month.reduce((t,c)=>t+c.in,0)/1000)}k entrada · ${Math.round(month.reduce((t,c)=>t+c.out,0)/1000)}k salida</em></div>
     </div>
-    <p class="note" style="margin-top:12px">La app anota cada llamada con los tokens que informa Claude y los precios de lista.${nImp ? " En los días con factura importada se usa la cifra facturada por Anthropic en lugar de la estimación." : ""} El registro vive en este teléfono.</p></section>
-  <section class="card"><h2>Importar la factura de Anthropic</h2>
-    <p class="note">En platform.claude.com → Usage, exportá el CSV de costos y elegilo acá. Trae el histórico real y, en esas fechas, reemplaza las estimaciones. Se puede repetir cada mes.</p>
-    <div class="btns"><label class="btn primary" for="costfile" style="cursor:pointer">Elegir archivo CSV</label><input type="file" id="costfile" accept=".csv,text/csv" hidden></div>
-    <label for="costpaste">O pegá el contenido del CSV</label>
-    <textarea id="costpaste" style="min-height:70px;font:12px var(--mono)" placeholder="usage_date_utc,model,…"></textarea>
-    <div class="btns"><button class="btn" type="button" id="costpastebtn">Importar lo pegado</button>${nImp ? `<button class="btn danger" type="button" id="costclear">Borrar lo importado</button>` : ""}</div>
-    <p class="msg ${state.costMsg?.ok ? "ok" : "bad"}" id="costmsg" role="status">${state.costMsg ? esc(state.costMsg.t) : ""}</p></section>
+    <p class="note" style="margin-top:12px">Dos fuentes: la factura real de Anthropic, que viene con la app${nImp ? ` y llega hasta el ${shortDate(list.filter(c=>c.imported).slice(-1)[0].date)}` : ""}, y las llamadas que este teléfono registra con los tokens que informa Claude a precio de lista. En los días con factura, manda la factura.</p></section>
   ${month.length ? `<section class="card"><h2>Este mes por tipo</h2><div class="list">${Object.entries(byKind).sort((a,b) => b[1].usd - a[1].usd).map(([k,v]) => `<div class="row" style="grid-template-columns:1fr auto"><div class="t"><b>${esc(k)}</b><span>${v.n} ${v.n===1?"llamada":"llamadas"} · ${Math.round(v.in/1000)}k entrada · ${Math.round(v.out/1000)}k salida · ${usd(v.usd/v.n)} cada una</span></div><div class="load">${usd(v.usd).replace("USD ","")}<small>USD</small></div></div>`).join("")}</div></section>` : ""}
   ${list.length ? `<section class="card"><h2>Últimos 30 días</h2>${barChartMoney(days)}</section>` : ""}
   ${list.length ? `<section class="card"><h2>Últimas llamadas</h2><div class="list">${list.slice(-25).reverse().map(c => { const d = new Date(c.at);
@@ -1630,12 +1624,6 @@ function renderInner(){
   const rw = $("#runweek"); if(rw) rw.addEventListener("click", doWeek);
   const fw = $("#fillwo"); if(fw) fw.addEventListener("click", doFill);
   bindRaces();
-  const doImport = text => { const msg = $("#costmsg");
-    try{ const r = importCosts(parseCostCsv(text)); state.costMsg = { ok:true, t:`Importado: ${usd(r.usd)} en ${r.dias} ${r.dias===1?"día":"días"} (${shortDate(r.desde)} al ${shortDate(r.hasta)}).` }; render() }
-    catch(e){ msg.className = "msg bad"; msg.textContent = e.message } };
-  const cf = $("#costfile"); if(cf) cf.addEventListener("change", () => { const f = cf.files?.[0]; if(!f) return; const rd = new FileReader(); rd.onload = () => doImport(String(rd.result)); rd.readAsText(f) });
-  const cp = $("#costpastebtn"); if(cp) cp.addEventListener("click", () => doImport($("#costpaste").value));
-  const cc = $("#costclear"); if(cc) cc.addEventListener("click", () => { cacheSet("costs", (cacheGet("costs")||[]).filter(c => !c.imported)); state.costMsg = { ok:true, t:"Datos importados borrados; quedan las estimaciones de la app." }; render() });
   const hf = $("#home-find"); if(hf) hf.addEventListener("click", async () => {
     const q = $("#home-q").value.trim(); if(!q) return;
     try{ state.homeResults = await geocode(q); state.homeMsg = null }catch(e){ state.homeMsg = e.message }
@@ -1659,7 +1647,7 @@ async function refresh(){
   if(state.data && !state.demo) mergeRaceEvents(state.data);
   $("#main").classList.remove("loading");
   render();
-  loadWeather().then(render); loadRaceWeather();
+  loadWeather().then(render); loadRaceWeather(); loadBilling().then(() => { if(state.view === "costos") render() });
 }
 function bindAjustes(){
   const f = $("#cfg"); if(!f) return;

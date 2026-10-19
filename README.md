@@ -19,6 +19,11 @@ App web para el celular conectada a Intervals.icu, con un coach de IA (Claude) q
 - **Plan:** calendario de Intervals de los próximos 14 días.
 - **Bienestar:** HRV, FC en reposo, sueño y peso.
 
+## Costos
+
+- La pestaña **Costos** combina dos fuentes: la factura real de Anthropic, que vive en `data/costos-anthropic.csv` dentro del repositorio y la app lee al abrirse, y las llamadas que cada teléfono registra con los tokens que informa Claude a precio de lista. En los días con factura, manda la factura.
+- Para actualizar la factura: exportar el CSV de costos desde platform.claude.com → Usage y agregar sus filas con costo mayor a cero a `data/costos-anthropic.csv` (columnas `usage_date_utc,model,token_type,cost_usd`). Se publica solo con el siguiente deploy.
+
 ## Datos y claves
 
 - Las claves se guardan solo en el navegador del teléfono. El código no contiene claves ni datos del atleta.
