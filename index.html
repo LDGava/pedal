@@ -219,7 +219,7 @@ pre.wo{margin:8px 0 0;padding:10px;border-radius:8px;background:var(--bg);border
 <script>
 (() => {
 "use strict";
-const APP_VERSION = "0.0.11";
+const APP_VERSION = "0.0.12";
 const API = "https://intervals.icu/api/v1";
 const store = {
   get(k){ try{ return localStorage.getItem("pedal."+k) }catch(e){ return null } },
@@ -476,7 +476,7 @@ async function askClaude(user, progressId, maxTokens = 16000){
   const t0 = Date.now(), ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 6*60*1000);
   const secs = () => Math.round((Date.now()-t0)/1000);
   const detail = (extra) => ` [${model} · ${secs()} s${extra ? " · " + extra : ""} · v${APP_VERSION}]`;
-  const show = t => { const b = progressId && document.getElementById(progressId); if(b) b.textContent = t };
+  const show = t => setProgress(progressId, t);
   /* Algunos modelos no aceptan la entrega obligatoria por herramienta: se reintenta con elección libre y se recuerda para ese modelo */
   const modeKey = "ai.toolmode." + model;
   let mode = store.get(modeKey) || "tool", r;
@@ -700,8 +700,8 @@ async function saveRace(form){
 }
 
 const AVAIL_RULES = `Disponibilidad (manda sobre cualquier otra regla y sobre lo que haya en el calendario de Intervals). Cada día puede combinar tres cosas, cada una con las horas que el atleta tiene:
-- gimnasio_h: vos das la rutina. Una sesión tipo WeightTraining de hasta esas horas. En "workout" va la rutina: un ejercicio por línea con series × repeticiones, carga orientativa (RPE o % de 1RM) y descanso; las líneas NO empiezan con guion. Ajustala a la bici: nada de piernas pesado el día antes de una sesión de calidad ni el día de una salida larga. "load" estimalo con referencia_gimnasio.carga_por_hora × horas si existe.
-- bici_coach_h: vos das la sesión de bici. Una sesión tipo Ride (o VirtualRide si el clima obliga a rodillo) que no supere esas horas, con workout en sintaxis de intervals. Puede ser más corta si conviene.
+- gimnasio_h: vos das la rutina. Una sesión tipo WeightTraining de hasta esas horas. En "detalle" va el objetivo y el foco (p. ej. "fuerza de tren inferior, sin fatiga residual para el jueves"); la rutina se arma después, aparte. Ajustala a la bici: nada de piernas pesado el día antes de una sesión de calidad ni el día de una salida larga. "load" estimalo con referencia_gimnasio.carga_por_hora × horas si existe.
+- bici_coach_h: vos das la sesión de bici. Una sesión tipo Ride (o VirtualRide si el clima obliga a rodillo) que no supere esas horas. En "detalle" va la estructura resumida (p. ej. "3×12 min a 92–95 % FTP, rec. 5 min"); el entrenamiento completo se arma después, aparte. Puede ser más corta si conviene.
 - bici_libre_h: MODO RECEPCIÓN. Sale por su cuenta o con un profesor y el contenido no lo decidís vos. Una sesión tipo "BiciLibre", sesion "Bici libre", min = horas × 60, load y rpe_esperado = estimado_bici_libre (o tu estimación si no hay), workout vacío. Planificá el resto contando esa carga; cuando se haga, se usa la real.
 - carrera_h: competencia. Una sesión tipo "Carrera", sesion con el nombre de la carrera si está registrada, min = horas × 60, load y rpe_esperado = estimado_carrera, workout vacío. No la planifiques: prepará los días previos (descarga y activación según su prioridad y su modelo personal si está validado) y poné recuperación el día siguiente.
 - descanso: si no tiene nada marcado, un único registro tipo Descanso con load 0.
@@ -746,7 +746,7 @@ Bloque principal 3x
 Vuelta a la calma
 - 10m 50%
 Para bici libre, carrera y descanso, "workout" va vacío; para gimnasio va la rutina como se indica en las reglas de disponibilidad.`;
-const DIA_SHAPE = `{"fecha":"YYYY-MM-DD","tipo":"Ride|VirtualRide|WeightTraining|BiciLibre|Carrera|Descanso","sesion":"nombre corto","detalle":"objetivo de la sesión en una línea","min":0,"load":0,"rpe_esperado":0,"workout":"texto en sintaxis intervals o vacío"}`;
+const DIA_SHAPE = `{"fecha":"YYYY-MM-DD","tipo":"Ride|VirtualRide|WeightTraining|BiciLibre|Carrera|Descanso","sesion":"nombre corto","detalle":"objetivo y estructura resumida en una línea","min":0,"load":0,"rpe_esperado":0}`;
 /* ---- Memoria del coach: plan vs real, aprendizajes y 52 semanas ---- */
 const sum = (arr, f) => arr.reduce((t,x) => t + (f(x)||0), 0);
 function mondayOf(dateStr){ const d = new Date(dateStr+"T12:00:00"); return iso(addDays(d, -((d.getDay()+6)%7))) }
@@ -814,14 +814,13 @@ ${AVAIL_RULES}
 - Decidí cuánto entrenar (carga semanal) y dónde van los descansos según la forma, la rampa, el bienestar y los RPE recientes, contando la carga estimada de gimnasio y clases.
 - "rpe_esperado" es el RPE (1–10) que esperás que reporte en cada sesión; 0 en descanso. Sirve para medir después si calibraste bien.
 - Antes de planificar, revisá el historial plan vs real y actualizá los aprendizajes: conservá los que siguen valiendo, corregí los que los datos contradicen y sumá nuevos solo con evidencia de al menos dos situaciones. Máximo 12, cada uno en una frase con su evidencia entre paréntesis.
-${WORKOUT_SYNTAX}
 Devolvé exactamente este JSON:
 {"aprendizajes":["patrón concreto del atleta (evidencia)"],
 "calibracion":"una frase: qué cambiaste respecto de la semana pasada a partir del historial",
 "carga_semana_objetivo":0,"enfoque":"una frase con el objetivo de la semana","descanso":"qué días descansa y por qué, con datos",
 "explicacion":"3 a 5 frases: de dónde viene, cómo está y qué prioriza esta semana",
 "dias":[${DIA_SHAPE}]}`;
-  return askClaude(prompt, "runweek");
+  return askClaude(prompt, "runweek", 8000);
 }
 async function runDaily(){
   const D = state.data, {ctx} = aiCfg(), wk = cacheGet("coach.week");
@@ -836,7 +835,6 @@ Revisá lo que hizo hasta hoy contra el plan (cumplimiento, carga real y RPE) y 
 1. Si la sesión planificada para hoy es apropiada, hay que ajustarla o conviene descansar.
 2. Si hace falta cambiar días que quedan. Si una bici libre, una carrera o un gimnasio ya se hizo, usá su carga y su RPE reales (no el estimado) para recalcular lo que queda. Las bicis libres y carreras futuras no se replanifican: solo cambian si cambió la disponibilidad. Si la disponibilidad de un día cambió respecto del plan, ese día va en ajustes según la nueva.
 Para cada día que cambia, "ajustes" trae TODAS las sesiones de ese día (reemplazan a las anteriores); un día que pasa a descanso lleva un registro tipo Descanso. Solo incluí en "ajustes" los días que cambian, desde hoy en adelante y nunca después del ${plan ? plan[plan.length-1].fecha : iso(addDays(new Date(),6))}.
-${WORKOUT_SYNTAX}
 Devolvé exactamente este JSON:
 {"semaforo":"verde|amarillo|rojo","estado":"una frase con el diagnóstico de hoy",
 "sesion_hoy":{"veredicto":"apropiada|ajustar|descansar","motivo":"con datos"},
@@ -844,7 +842,49 @@ Devolvé exactamente este JSON:
 "ajustes":[${DIA_SHAPE.replace('}', ',"motivo":"por qué cambia"}')}],
 "alertas":["señal concreta con dato"],
 "explicacion":"2 a 4 frases sobre cómo viene la semana"}`;
-  return askClaude(prompt, "rundaily");
+  return askClaude(prompt, "rundaily", 6000);
+}
+
+/* ---- Etapa 2: cada sesión se arma aparte, varias a la vez. Lo que llega se guarda al instante ---- */
+const NEEDS_WO = d => (BIKE(d.tipo) || d.tipo === "WeightTraining") && !d.workout && d.fecha >= iso(new Date());
+const pendingWorkouts = wk => wk ? wk.r.dias.filter(NEEDS_WO) : [];
+async function buildWorkout(d, D){
+  const same = (cacheGet("coach.week")?.r.dias || []).filter(x => x.fecha !== d.fecha && Math.abs(new Date(x.fecha+"T12:00:00") - new Date(d.fecha+"T12:00:00")) <= 2*864e5)
+    .map(x => ({ fecha:x.fecha, tipo:x.tipo, sesion:x.sesion, detalle:x.detalle }));
+  const gym = d.tipo === "WeightTraining";
+  const prompt = `Atleta: ${D.name}. FTP: ${D.ftp ?? "sin dato"} W. Contexto: ${aiCfg().ctx || "no informado"}.
+Sesión a armar: ${JSON.stringify({ fecha:d.fecha, dia:DOW[dowOf(d.fecha)], tipo:d.tipo, sesion:d.sesion, detalle:d.detalle, min:d.min, load:d.load, rpe_esperado:d.rpe_esperado })}
+Sesiones vecinas (dos días antes y después), para que sea compatible: ${JSON.stringify(same)}
+${gym ? `Armá la rutina de gimnasio completa para ${d.min} minutos: un ejercicio por línea con series × repeticiones, carga orientativa (RPE o % de 1RM) y descanso; las líneas NO empiezan con guion. Respetá el foco de "detalle" y la compatibilidad con la bici de los días vecinos.`
+      : `Armá el entrenamiento de bici completo para ${d.min} minutos, con la estructura de "detalle". ${WORKOUT_SYNTAX}`}
+Devolvé exactamente este JSON: {"workout":"texto completo","nota":"una frase con la clave de ejecución"}`;
+  const r = await askClaude(prompt, null, 2500);
+  return { workout: String(r.workout || "").trim(), nota: r.nota };
+}
+async function fillWorkouts(progressId){
+  const D = state.data; let wk = cacheGet("coach.week"); if(!wk) return;
+  const todo = pendingWorkouts(wk); if(!todo.length) return;
+  const total = todo.length; let done = 0, fail = 0;
+  const show = () => setProgress(progressId, `Armando sesiones… ${done} de ${total}`);
+  show();
+  const queue = [...todo];
+  const worker = async () => { while(queue.length){ const d = queue.shift();
+    try{
+      const w = await buildWorkout(d, D);
+      wk = cacheGet("coach.week"); const t = wk.r.dias.find(x => x.fecha === d.fecha && x.tipo === d.tipo && x.sesion === d.sesion);
+      if(t && w.workout){ t.workout = w.workout; if(w.nota) t.nota = w.nota; if(t.eventId) t.dirty = true; cacheSet("coach.week", wk) }
+    }catch(e){ fail++; state.woError = e.message }
+    done++; show(); if(state.view === "coach") renderDaysOnly(); } };
+  await Promise.all([worker(), worker(), worker()]);
+  if(fail) state.woError = `${fail} ${fail===1 ? "sesión quedó sin armar" : "sesiones quedaron sin armar"}: ${state.woError}`; else state.woError = null;
+}
+/* Redibuja solo la lista de días para no perder lo que el usuario está mirando */
+function renderDaysOnly(){ render() }
+/* Pantalla encendida mientras el coach trabaja (el celular corta la conexión si la app se duerme) */
+let wakeLock = null;
+async function keepAwake(on){
+  try{ if(on && !wakeLock && navigator.wakeLock){ wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => wakeLock = null) }
+    if(!on && wakeLock){ await wakeLock.release(); wakeLock = null } }catch(_){}
 }
 async function runActivity(act){
   const D = state.data, {ctx} = aiCfg();
@@ -919,7 +959,8 @@ const shortDate = s => { const d = new Date(s+"T12:00:00"); return `${d.getDate(
 const TITLES = {hoy:"Hoy", carreras:"Carreras", modelo:"Modelo", coach:"Coach", analisis:"Análisis", actividades:"Actividades", plan:"Plan", bienestar:"Bienestar", ajustes:"Ajustes"};
 const LIGHT = { verde:["--good","Verde"], amarillo:["--warn","Amarillo"], rojo:["--bad","Rojo"] };
 const VERD = { "bien":["--good","Rindió bien"], "normal":["--ctl","Normal"], "por debajo":["--bad","Por debajo"] };
-const busyBtn = (id, label, busy) => `<button class="btn primary" id="${id}" ${busy?"disabled":""}>${busy?"Analizando… (puede tardar 20–40 s)":label}</button>`;
+const busyBtn = (id, label, busy) => `<button class="btn primary" id="${id}" ${busy?"disabled":""}>${busy ? (state.progress || "Analizando…") : label}</button>`;
+function setProgress(id, text){ state.progress = text; const b = id && document.getElementById(id); if(b) b.textContent = text }
 const stamp = at => `<p class="stamp">Generado ${new Date(at).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"})} · ${esc(aiCfg().model)}</p>`;
 function noAiKey(){ return `<section class="card"><h2>Coach con IA</h2><p class="note">Para que Claude revise el entrenamiento, cargá una clave de la API de Anthropic en <a href="#" data-go="ajustes">Ajustes</a>.</p></section>` }
 
@@ -1019,6 +1060,9 @@ function viewCoach(D){
       ${pendingSend.length || (wk?.orphans||[]).length ? `<button class="btn" id="sendweek" ${state.busy==="send"?"disabled":""}>${state.busy==="send" ? "Mandando…" : pendingSend.length ? `Mandar ${pendingSend.length} al Garmin` : "Actualizar el Garmin"}</button>` : ""}
     </div>
     ${state.aiError==="week" ? `<p class="msg bad">${esc(state.aiErrorMsg)}</p>` : ""}
+    ${state.busy==="week" || state.busy==="daily" || state.busy==="fill" ? `<p class="stamp">Dejá la app abierta en pantalla hasta que termine: si el celular se bloquea o cambiás de app, la conexión se corta. Lo que ya llegó queda guardado.</p>` : ""}
+    ${w && pendingWorkouts(wk).length && !state.busy ? `<p class="msg bad">${pendingWorkouts(wk).length === 1 ? "Falta armar 1 sesión" : `Faltan armar ${pendingWorkouts(wk).length} sesiones`}${state.woError ? ` · ${esc(state.woError)}` : ""}</p><div class="btns"><button class="btn primary" id="fillwo">Completar sesiones</button></div>` : ""}
+    ${state.busy==="fill" ? `<div class="btns">${busyBtn("fillwo", "", true)}</div>` : ""}
     ${state.sendMsg ? `<p class="msg ${state.sendMsg.ok?"ok":"bad"}">${esc(state.sendMsg.t)}</p>` : ""}
     ${w && weekStale ? `<p class="stamp">Este plan ya terminó. Planificá la semana nueva.</p>` : ""}
     ${wk ? stamp(wk.at) : ""}</section>`;
@@ -1028,6 +1072,7 @@ function viewCoach(D){
       const chips = [
         isT ? `<span class="chip" style="color:var(--accent)">Hoy</span>` : "",
         d.tipo==="BiciLibre" ? `<span class="chip" style="color:var(--atl)">Recepción</span>` : "",
+        NEEDS_WO(d) ? `<span class="chip" style="color:var(--muted)">${state.busy ? "Armando…" : "Sin armar"}</span>` : "",
         d.tipo==="Carrera" ? `<span class="chip" style="color:var(--bad)">Carrera</span>` : "",
         d.ajustado ? `<span class="chip" style="color:var(--warn)">Ajustado</span>` : "",
         d.eventId && !d.dirty ? `<span class="chip" style="color:var(--good)">En Garmin</span>` : "",
@@ -1035,7 +1080,7 @@ function viewCoach(D){
       ].join("");
       return `<div class="row${sameDay?" same":""}" style="${past?"opacity:.55":""}">${sameDay ? "<div></div>" : dateCell(d.fecha)}<div class="t"><b>${esc(d.sesion)}</b><span style="white-space:normal">${chips}${esc([d.min?fmtDur(d.min*60):"", d.detalle].filter(Boolean).join(" · "))}</span>
         ${d.motivo ? `<span style="white-space:normal;display:block;color:var(--warn)">${esc(d.motivo)}</span>` : ""}
-        ${d.workout ? `<button class="mini" data-wo="${i}">${state.openWo===i ? "Ocultar" : d.tipo==="WeightTraining" ? "Ver rutina" : "Ver estructura"}</button>${state.openWo===i ? `<pre class="wo">${esc(d.workout)}</pre>` : ""}` : ""}</div>
+        ${d.workout ? `<button class="mini" data-wo="${i}">${state.openWo===i ? "Ocultar" : d.tipo==="WeightTraining" ? "Ver rutina" : "Ver estructura"}</button>${state.openWo===i ? `<pre class="wo">${esc(d.workout)}${d.nota ? "\n\n" + esc(d.nota) : ""}</pre>` : ""}` : ""}</div>
         <div class="load">${d.load?n0(d.load):"—"}<small>CARGA</small></div></div>` }).join("")}</div></section>`;
 
   /* Memoria: aprendizajes y plan vs real */
@@ -1083,7 +1128,7 @@ function replaceDay(wk, fecha, news, mark){
   wk.r.dias = wk.r.dias.filter(d => d.fecha !== fecha).concat(fresh).sort((p,q) => p.fecha.localeCompare(q.fecha));
 }
 async function doWeek(){
-  state.busy="week"; state.aiError=null; state.sendMsg=null; render();
+  state.busy="week"; state.aiError=null; state.sendMsg=null; state.woError=null; render(); keepAwake(true);
   try{
     archiveWeek(state.data);
     const r = await runWeek();
@@ -1096,8 +1141,15 @@ async function doWeek(){
     wk.r.dias = wk.r.dias.filter(d => dias.some(x => x.fecha === d.fecha));
     dias.forEach(d => wk.modes[d.fecha] = modeOf(d.fecha));
     cacheSet("coach.week", wk);
+    render();
+    await fillWorkouts("runweek");
   }catch(e){ state.aiError="week"; state.aiErrorMsg=e.message }
-  state.busy=null; try{ state.model = fitModel(state.data) }catch(_){} render();
+  keepAwake(false); state.busy=null; state.progress=null; try{ state.model = fitModel(state.data) }catch(_){} render();
+}
+async function doFill(){
+  state.busy="fill"; state.woError=null; render(); keepAwake(true);
+  try{ await fillWorkouts("fillwo") }catch(e){ state.woError = e.message }
+  keepAwake(false); state.busy=null; state.progress=null; render();
 }
 async function sendWeek(){
   const wk = cacheGet("coach.week"); if(!wk) return;
@@ -1250,7 +1302,7 @@ function viewAnalisis(D){
   return html;
 }
 async function doDaily(){
-  state.busy="daily"; state.aiError=null; render();
+  state.busy="daily"; state.aiError=null; render(); keepAwake(true);
   try{
     const r = await runDaily(); cacheSet("coach.daily", {date:iso(new Date()), at:Date.now(), r});
     const wk = cacheGet("coach.week");
@@ -1260,17 +1312,19 @@ async function doDaily(){
       Object.entries(byDate).forEach(([f, news]) => { if(f >= iso(new Date()) && f >= first && f <= last) replaceDay(wk, f, news, true) });
       wk.modes = wk.modes || {}; wk.r.dias.forEach(d => { if(d.fecha >= iso(new Date())) wk.modes[d.fecha] = modeOf(d.fecha) });
       cacheSet("coach.week", wk);
+      render();
+      await fillWorkouts("rundaily");
     }
   }
   catch(e){ state.aiError="daily"; state.aiErrorMsg=e.message }
-  state.busy=null; render();
+  keepAwake(false); state.busy=null; state.progress=null; render();
 }
 async function doActivity(){
   const act = state.data.activities.find(a => String(a.id)===String(state.actId)); if(!act) return;
   state.busy="act"; state.aiError=null; render();
   try{ const r = await runActivity(act); cacheSet("coach.act."+act.id, {at:Date.now(), r}) }
   catch(e){ state.aiError="act"; state.aiErrorMsg=e.message }
-  state.busy=null; render();
+  state.busy=null; state.progress=null; render();
 }
 function demoNote(){ return state.demo ? `<p class="note">Datos de ejemplo. Cargá tu clave en <a href="#" data-go="ajustes">Ajustes</a> para ver los tuyos.</p>` : "" }
 
@@ -1456,6 +1510,7 @@ function render(){
   bindAjustes();
   const rd = $("#rundaily"); if(rd) rd.addEventListener("click", doDaily);
   const rw = $("#runweek"); if(rw) rw.addEventListener("click", doWeek);
+  const fw = $("#fillwo"); if(fw) fw.addEventListener("click", doFill);
   bindRaces();
   const hf = $("#home-find"); if(hf) hf.addEventListener("click", async () => {
     const q = $("#home-q").value.trim(); if(!q) return;
