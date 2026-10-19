@@ -204,6 +204,7 @@ pre.wo{margin:8px 0 0;padding:10px;border-radius:8px;background:var(--bg);border
   <button class="nav" data-view="carreras"><svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h12l-2 4 2 4H5"/></svg>Carreras</button>
   <button class="nav" data-view="plan"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Plan</button>
   <button class="nav" data-view="bienestar"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></svg>Bienestar</button>
+  <button class="nav" data-view="costos"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h3.5a1.75 1.75 0 0 1 0 3.5h-2a1.75 1.75 0 0 0 0 3.5H15"/></svg>Costos</button>
   <button class="nav" data-view="ajustes"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Ajustes</button>
   <div class="foot"><span id="sidefoot">Sin conectar</span></div>
 </aside>
@@ -222,7 +223,7 @@ pre.wo{margin:8px 0 0;padding:10px;border-radius:8px;background:var(--bg);border
 <script>
 (() => {
 "use strict";
-const APP_VERSION = "0.0.14";
+const APP_VERSION = "0.0.15";
 const API = "https://intervals.icu/api/v1";
 const store = {
   get(k){ try{ return localStorage.getItem("pedal."+k) }catch(e){ return null } },
@@ -432,7 +433,7 @@ const AI_URL = "https://api.anthropic.com/v1/messages";
 const MODELS = [
   ["claude-sonnet-5-5","Sonnet: equilibrio entre calidad y costo"],
   ["claude-opus-5-5","Opus: análisis más profundo, más caro"],
-  ["claude-haiku-4-5-20251001","Haiku: más rápido y barato"]
+  ["claude-haiku-5-5","Haiku: más rápido y barato"]
 ];
 function aiCfg(){ return { key: store.get("aikey"), model: store.get("aimodel") || MODELS[0][0], ctx: store.get("aictx") || "", gym: store.get("aigym") || "equilibrio" } }
 const GYM_PREFS = [
@@ -466,6 +467,17 @@ Reglas:
 - Entregás el resultado SIEMPRE llamando a la herramienta entregar_resultado, con exactamente la estructura JSON pedida y sin texto aparte. Si no pudieras usar la herramienta, respondé solo con ese JSON.`;
 
 /* Claude devuelve el resultado como entrada de una herramienta obligatoria: llega como objeto ya armado, sin texto que parsear */
+/* Precios por millón de tokens (USD), entrada / salida. Se usan para el registro de costos */
+const PRICES = { "claude-opus-5-5":[4,20], "claude-sonnet-5-5":[2,10], "claude-haiku-5-5":[0.10,0.50], "claude-haiku-4-5-20251001":[1,5] };
+const priceOf = m => PRICES[m] || PRICES[Object.keys(PRICES).find(k => m.startsWith(k.split("-").slice(0,3).join("-")))] || [2,10];
+const KIND = { runweek:"Plan semanal", rundaily:"Revisión diaria", runact:"Análisis de sesión", fillwo:"Sesión del plan" };
+function recordCost(model, kind, tin, tout){
+  const [pi, po] = priceOf(model), usd = (tin*pi + tout*po)/1e6;
+  const list = cacheGet("costs") || [];
+  list.push({ at: Date.now(), model, kind, in: tin, out: tout, usd: +usd.toFixed(5) });
+  cacheSet("costs", list.slice(-600));
+  return usd;
+}
 const OUT_TOOL = { name: "entregar_resultado", description: "Entrega el resultado con exactamente la estructura JSON pedida en el mensaje.", input_schema: { type: "object", additionalProperties: true } };
 /* Respaldo si llegara como texto: corta lo que sobra y escapa saltos de línea dentro de cadenas */
 function parseLoose(text){
@@ -482,7 +494,7 @@ function parseLoose(text){
   return JSON.parse(out);
 }
 /* Llamada en streaming: la respuesta llega de a partes, la conexión no queda en silencio y el botón muestra el avance */
-async function askClaude(user, progressId, maxTokens = 16000){
+async function askClaude(user, progressId, maxTokens = 16000, kind){
   const {key, model} = aiCfg();
   if(!key) throw new Error("Falta la clave de Claude. Cargala en Ajustes, en la sección Coach con IA.");
   const t0 = Date.now(), ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 6*60*1000);
@@ -516,7 +528,7 @@ async function askClaude(user, progressId, maxTokens = 16000){
     if(/credit|balance|billing/i.test(m)) throw new Error("La cuenta de la API no tiene crédito. Cargalo en platform.claude.com → Settings → Billing." + detail(String(r.status)));
     throw new Error(`Claude respondió ${r.status}: ${m}. Si el modelo no existe en tu cuenta, elegí otro en Ajustes.` + detail(String(r.status)));
   }
-  let buf = "", json = "", text = "", stop = null, apiErr = null;
+  let buf = "", json = "", text = "", stop = null, apiErr = null, tIn = 0, tOut = 0;
   try{
     const reader = r.body.getReader(), dec = new TextDecoder();
     while(true){
@@ -531,12 +543,14 @@ async function askClaude(user, progressId, maxTokens = 16000){
           if(d.delta?.type === "input_json_delta") json += d.delta.partial_json || "";
           else if(d.delta?.type === "text_delta") text += d.delta.text || "";
           show(`Recibiendo plan… ${Math.round((json.length + text.length)/100)/10} mil caracteres · ${secs()} s`);
-        } else if(d.type === "message_delta") stop = d.delta?.stop_reason || stop;
+        } else if(d.type === "message_start"){ tIn = d.message?.usage?.input_tokens || 0 }
+        else if(d.type === "message_delta"){ stop = d.delta?.stop_reason || stop; tOut = d.usage?.output_tokens || tOut }
         else if(d.type === "error") apiErr = d.error;
       }
     }
   }catch(e){ clearTimeout(timer); throw new Error((e.name==="AbortError" ? "Claude tardó más de 6 minutos." : "Se cortó la conexión mientras llegaba la respuesta. Dejá la app abierta en pantalla hasta que termine.") + detail(`${json.length} caracteres recibidos`)) }
   clearTimeout(timer);
+  if(tIn || tOut) recordCost(model, kind || KIND[progressId] || KIND.fillwo, tIn, tOut);
   if(apiErr) throw new Error((/overloaded/i.test(apiErr.type||"") ? "Claude está saturado en este momento. Probá en unos minutos." : `Claude devolvió un error: ${apiErr.message || apiErr.type}.`) + detail());
   if(stop === "max_tokens") throw new Error("La respuesta de Claude fue más larga de lo permitido y llegó cortada. Probá con una ventana de menos días." + detail(`${json.length} caracteres`));
   try{ if(json.trim()) return JSON.parse(json) }catch(_){}
@@ -972,7 +986,7 @@ function barChart(values, labels, aria){
 const shortDate = s => { const d = new Date(s+"T12:00:00"); return `${d.getDate()} ${MES[d.getMonth()]}` };
 
 /* ---------- Vistas ---------- */
-const TITLES = {hoy:"Hoy", carreras:"Carreras", modelo:"Modelo", coach:"Coach", analisis:"Análisis", actividades:"Actividades", plan:"Plan", bienestar:"Bienestar", ajustes:"Ajustes"};
+const TITLES = {hoy:"Hoy", costos:"Costos", carreras:"Carreras", modelo:"Modelo", coach:"Coach", analisis:"Análisis", actividades:"Actividades", plan:"Plan", bienestar:"Bienestar", ajustes:"Ajustes"};
 const LIGHT = { verde:["--good","Verde"], amarillo:["--warn","Amarillo"], rojo:["--bad","Rojo"] };
 const VERD = { "bien":["--good","Rindió bien"], "normal":["--ctl","Normal"], "por debajo":["--bad","Por debajo"] };
 const busyBtn = (id, label, busy) => `<button class="btn primary" id="${id}" ${busy?"disabled":""}>${busy ? (state.progress || "Analizando…") : label}</button>`;
@@ -1451,6 +1465,38 @@ function viewBienestar(D){
   ${has("hrv") ? `<section class="card"><h2>HRV · 30 días</h2>${lineChart([{values:w.map(x=>x.hrv),c:"--good"}],{h:130,labels:w.map(x=>shortDate(x.date)),aria:"HRV de los últimos 30 días"})}</section>` : ""}
   ${has("rhr") ? `<section class="card"><h2>FC en reposo · 30 días</h2>${lineChart([{values:w.map(x=>x.rhr),c:"--atl"}],{h:130,labels:w.map(x=>shortDate(x.date)),aria:"Frecuencia cardíaca en reposo de los últimos 30 días"})}</section>` : ""}`;
 }
+const usd = v => "USD " + (v < 0.01 && v > 0 ? v.toFixed(4) : v.toFixed(2)).replace(".", ",");
+function viewCostos(){
+  const list = cacheGet("costs") || [];
+  const now = new Date(), m0 = new Date(now.getFullYear(), now.getMonth(), 1).getTime(), w0 = addDays(now, -7).getTime();
+  const month = list.filter(c => c.at >= m0), week = list.filter(c => c.at >= w0);
+  const tot = a => a.reduce((t,c) => t + c.usd, 0);
+  const byKind = {}; month.forEach(c => { const k = byKind[c.kind] ||= {n:0, usd:0, in:0, out:0}; k.n++; k.usd += c.usd; k.in += c.in; k.out += c.out });
+  const days = []; for(let i=29;i>=0;i--){ const d = addDays(now,-i), k = iso(d); days.push({ k, label: d.getDate()+"/"+(d.getMonth()+1), usd: tot(list.filter(c => iso(new Date(c.at))===k)) }) }
+  const firstAt = list.length ? new Date(list[0].at) : null;
+  const perWeek = week.length ? tot(week) : null;
+  return `<section class="card"><h2>Gasto de la API de Claude</h2>
+    <div class="stats">
+      <div class="stat"><small>Este mes</small><b>${usd(tot(month))}</b><br><em>${month.length} llamadas</em></div>
+      <div class="stat"><small>Últimos 7 días</small><b>${perWeek==null ? "—" : usd(perWeek)}</b><br><em>${perWeek==null ? "sin llamadas" : "≈ " + usd(perWeek*4.33) + " por mes a este ritmo"}</em></div>
+      <div class="stat"><small>Desde el inicio</small><b>${usd(tot(list))}</b><br><em>${firstAt ? "desde el " + shortDate(iso(firstAt)) : "todavía sin registros"}</em></div>
+      <div class="stat"><small>Tokens este mes</small><b>${Math.round(month.reduce((t,c)=>t+c.in+c.out,0)/1000)}k</b><br><em>${Math.round(month.reduce((t,c)=>t+c.in,0)/1000)}k entrada · ${Math.round(month.reduce((t,c)=>t+c.out,0)/1000)}k salida</em></div>
+    </div>
+    <p class="note" style="margin-top:12px">La app anota cada llamada con los tokens que informa Claude y los precios de lista. Lo gastado antes de esta versión y la cifra exacta facturada están en platform.claude.com → Usage. El registro vive en este teléfono.</p></section>
+  ${month.length ? `<section class="card"><h2>Este mes por tipo</h2><div class="list">${Object.entries(byKind).sort((a,b) => b[1].usd - a[1].usd).map(([k,v]) => `<div class="row" style="grid-template-columns:1fr auto"><div class="t"><b>${esc(k)}</b><span>${v.n} ${v.n===1?"llamada":"llamadas"} · ${Math.round(v.in/1000)}k entrada · ${Math.round(v.out/1000)}k salida · ${usd(v.usd/v.n)} cada una</span></div><div class="load">${usd(v.usd).replace("USD ","")}<small>USD</small></div></div>`).join("")}</div></section>` : ""}
+  ${list.length ? `<section class="card"><h2>Últimos 30 días</h2>${barChartMoney(days)}</section>` : ""}
+  ${list.length ? `<section class="card"><h2>Últimas llamadas</h2><div class="list">${list.slice(-25).reverse().map(c => { const d = new Date(c.at);
+      return `<div class="row" style="grid-template-columns:44px 1fr auto">${dateCell(iso(d))}<div class="t"><b>${esc(c.kind)}</b><span>${d.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})} · ${esc(c.model.replace("claude-",""))} · ${(c.in/1000).toFixed(1).replace(".",",")}k + ${(c.out/1000).toFixed(1).replace(".",",")}k tokens</span></div><div class="load">${c.usd.toFixed(3).replace(".",",")}<small>USD</small></div></div>` }).join("")}</div></section>` : ""}
+  <section class="card"><h2>Precios de lista por millón de tokens</h2><div class="list">${MODELS.map(([m,l]) => { const [pi,po] = priceOf(m); return `<div class="row" style="grid-template-columns:1fr auto"><div class="t"><b>${esc(l.split(":")[0])}</b><span>${esc(m)}</span></div><div class="load" style="font-size:15px">${pi} / ${po}<small>ENTRADA / SALIDA</small></div></div>` }).join("")}</div></section>`;
+}
+function barChartMoney(days){
+  const W=340,H=150,L=40,R=8,T=10,B=20; const mx = Math.max(...days.map(d=>d.usd), 0.01), hi = Math.ceil(mx*100)/100;
+  const bw = (W-L-R)/days.length, y = v => T+(hi-v)*(H-T-B)/hi; let g="";
+  for(let k=0;k<=4;k++){ const v = hi*k/4; g += `<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-4}" y="${y(v)+3}" text-anchor="end">${v.toFixed(2).replace(".",",")}</text>` }
+  days.forEach((d,i) => { if(d.usd) g += `<rect x="${L+i*bw+bw*.15}" width="${bw*.7}" y="${y(d.usd)}" height="${y(0)-y(d.usd)}" rx="2" fill="var(--accent)" opacity="${i===days.length-1?1:.6}"/>`;
+    if(i%6===0 || i===days.length-1) g += `<text x="${L+i*bw+bw/2}" y="${H-4}" text-anchor="middle">${d.label}</text>` });
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Gasto diario en USD de los últimos 30 días">${g}</svg>`;
+}
 function viewAjustes(){
   const {key, athlete} = creds();
   return `<section class="card">
@@ -1540,6 +1586,7 @@ function renderInner(){
   let html = state.newVersion ? `<section class="card update"><p><b>Hay una versión nueva: v${esc(state.newVersion)}.</b> Tenés la v${APP_VERSION}.</p><button class="btn primary" type="button" id="doupdate">Actualizar ahora</button></section>` : "";
   if(state.error && v!=="ajustes") html += `<section class="card err"><p>${esc(state.error)}</p></section>`;
   if(v==="ajustes") html += viewAjustes();
+  else if(v==="costos") html += viewCostos();
   else if(state.data) html += ({hoy:viewHoy, carreras:viewCarreras, modelo:viewModelo, coach:viewCoach, analisis:viewAnalisis, actividades:viewActividades, plan:viewPlan, bienestar:viewBienestar})[v](state.data);
   else if(!state.error) html += `<section class="card"><p class="note">Cargando datos de Intervals…</p></section>`;
   $("#main").innerHTML = html;
@@ -1596,7 +1643,7 @@ function bindAjustes(){
     msg.className = aiCfg().key ? "msg ok" : "msg bad";
     msg.textContent = aiCfg().key ? "Coach guardado. Ya podés pedir la revisión en Coach." : "Guardé el contexto, pero falta la clave de Claude.";
   });
-  const BK = ["coach.notes","coach.rejected","coach.history","coach.week","aictx","week.std","week.override","races","place.home"];
+  const BK = ["coach.notes","coach.rejected","coach.history","coach.week","aictx","aigym","week.std","week.override","races","place.home","costs"];
   $("#bkcopy").addEventListener("click", () => {
     const data = {}; BK.forEach(k => { const v = store.get(k); if(v!=null) data[k] = v });
     const txt = JSON.stringify(data), msg = $("#bkmsg");
